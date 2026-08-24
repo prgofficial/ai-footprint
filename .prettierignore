@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+*.md
+package-lock.json
+apps/web/src/components/ui
+playwright-report
+test-results
