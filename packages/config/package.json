@@ -1,0 +1,20 @@
+{
+  "name": "@ai-footprint/config",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ai-footprint/shared": "1.0.0",
+    "pino": "^9.5.0",
+    "pino-roll": "^3.0.0"
+  }
+}
