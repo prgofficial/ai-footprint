@@ -1,0 +1,24 @@
+{
+  "name": "@ai-footprint/database",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ai-footprint/config": "1.0.0",
+    "@ai-footprint/shared": "1.0.0",
+    "better-sqlite3": "^11.7.0",
+    "drizzle-orm": "^0.38.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12"
+  }
+}
