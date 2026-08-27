@@ -1,0 +1,638 @@
+[
+  {
+    "text": "fix the failing login test in the auth module",
+    "expected": "Debugging"
+  },
+  {
+    "text": "why does this throw a null pointer exception on startup",
+    "expected": "Debugging"
+  },
+  {
+    "text": "the build crashes with ECONNREFUSED when I run it locally",
+    "expected": "Debugging"
+  },
+  {
+    "text": "debug why the websocket connection keeps dropping",
+    "expected": "Debugging"
+  },
+  {
+    "text": "my migration fails with a foreign key constraint error",
+    "expected": "Debugging"
+  },
+  {
+    "text": "this function returns undefined instead of the user object",
+    "expected": "Debugging"
+  },
+  {
+    "text": "the app hangs after the third request, help me find the root cause",
+    "expected": "Debugging"
+  },
+  {
+    "text": "traceback says KeyError but the key is clearly there",
+    "expected": "Debugging"
+  },
+  {
+    "text": "why is the total NaN after I sum the line items",
+    "expected": "Debugging"
+  },
+  {
+    "text": "the pipeline broke overnight and I cannot reproduce it locally",
+    "expected": "Debugging"
+  },
+  {
+    "text": "fix the infinite loop in the retry handler",
+    "expected": "Debugging"
+  },
+  {
+    "text": "segfault when parsing an empty buffer, what is wrong",
+    "expected": "Debugging"
+  },
+  {
+    "text": "this regression appeared after the last release, find it",
+    "expected": "Debugging"
+  },
+  {
+    "text": "the timeout fires even though the request completed",
+    "expected": "Debugging"
+  },
+  {
+    "text": "stack trace points at the ORM but the query looks fine",
+    "expected": "Debugging"
+  },
+  {
+    "text": "implement a password reset endpoint",
+    "expected": "Implementation"
+  },
+  {
+    "text": "add a dark mode toggle to the settings screen",
+    "expected": "Implementation"
+  },
+  {
+    "text": "build a rate limiter for the public API",
+    "expected": "Implementation"
+  },
+  {
+    "text": "create a new component for the invoice summary",
+    "expected": "Implementation"
+  },
+  {
+    "text": "write a function that merges two sorted arrays",
+    "expected": "Implementation"
+  },
+  {
+    "text": "add support for uploading multiple files at once",
+    "expected": "Implementation"
+  },
+  {
+    "text": "scaffold a new module for notifications",
+    "expected": "Implementation"
+  },
+  {
+    "text": "wire up the search box to the backend endpoint",
+    "expected": "Implementation"
+  },
+  {
+    "text": "generate a CSV download for the report page",
+    "expected": "Implementation"
+  },
+  {
+    "text": "make a reusable modal component",
+    "expected": "Implementation"
+  },
+  {
+    "text": "implement pagination on the orders list",
+    "expected": "Implementation"
+  },
+  {
+    "text": "add a new screen for editing a profile",
+    "expected": "Implementation"
+  },
+  {
+    "text": "create an endpoint that returns aggregated sales",
+    "expected": "Implementation"
+  },
+  {
+    "text": "integrate the payment provider into checkout",
+    "expected": "Implementation"
+  },
+  {
+    "text": "build the onboarding flow with three steps",
+    "expected": "Implementation"
+  },
+  {
+    "text": "review this pull request for security problems",
+    "expected": "Code Review"
+  },
+  {
+    "text": "code review the changes in the billing module",
+    "expected": "Code Review"
+  },
+  {
+    "text": "is this correct or did I miss an edge case",
+    "expected": "Code Review"
+  },
+  {
+    "text": "any issues with the way I handled the transaction here",
+    "expected": "Code Review"
+  },
+  {
+    "text": "give me feedback on this diff before I merge",
+    "expected": "Code Review"
+  },
+  {
+    "text": "critique my approach to caching in this file",
+    "expected": "Code Review"
+  },
+  {
+    "text": "audit this handler for injection risks",
+    "expected": "Code Review"
+  },
+  {
+    "text": "look over the migration and tell me if anything is wrong",
+    "expected": "Code Review"
+  },
+  {
+    "text": "review the error handling in this service",
+    "expected": "Code Review"
+  },
+  {
+    "text": "check whether this follows best practice for the framework",
+    "expected": "Code Review"
+  },
+  {
+    "text": "refactor the user service to remove duplication",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "clean up this file, it has grown out of control",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "simplify the nested conditionals in the validator",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "extract the shared logic into a helper",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "rename these variables so they describe what they hold",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "restructure the folders so features sit together",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "deduplicate the three copies of this query",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "split this 900 line file into smaller modules",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "modernise this code to use async await",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "consolidate the two config loaders into one",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "explain what this reducer is doing",
+    "expected": "Explanation"
+  },
+  {
+    "text": "what does this regular expression match",
+    "expected": "Explanation"
+  },
+  {
+    "text": "how does the event loop handle this promise",
+    "expected": "Explanation"
+  },
+  {
+    "text": "walk me through how authentication flows through the app",
+    "expected": "Explanation"
+  },
+  {
+    "text": "help me understand why this uses a weak map",
+    "expected": "Explanation"
+  },
+  {
+    "text": "what is the difference between these two hooks",
+    "expected": "Explanation"
+  },
+  {
+    "text": "explain the purpose of this middleware",
+    "expected": "Explanation"
+  },
+  {
+    "text": "what happens when two writers hit this row at once",
+    "expected": "Explanation"
+  },
+  {
+    "text": "clarify how the retry backoff is calculated",
+    "expected": "Explanation"
+  },
+  {
+    "text": "describe what this shell script actually does",
+    "expected": "Explanation"
+  },
+  {
+    "text": "research which queue library suits a single node deployment",
+    "expected": "Research"
+  },
+  {
+    "text": "compare postgres and sqlite for a local desktop app",
+    "expected": "Research"
+  },
+  {
+    "text": "find out whether this library still gets maintained",
+    "expected": "Research"
+  },
+  {
+    "text": "what are the alternatives to this deprecated package",
+    "expected": "Research"
+  },
+  {
+    "text": "evaluate the pros and cons of server components here",
+    "expected": "Research"
+  },
+  {
+    "text": "look up how other tools solve incremental indexing",
+    "expected": "Research"
+  },
+  {
+    "text": "investigate the options for local full text search",
+    "expected": "Research"
+  },
+  {
+    "text": "recommend a charting library that supports accessibility",
+    "expected": "Research"
+  },
+  {
+    "text": "which framework would be the best way to do this offline",
+    "expected": "Research"
+  },
+  {
+    "text": "benchmark these two approaches and tell me which wins",
+    "expected": "Research"
+  },
+  {
+    "text": "plan the work for the next milestone",
+    "expected": "Planning"
+  },
+  {
+    "text": "break this feature down into steps I can ship separately",
+    "expected": "Planning"
+  },
+  {
+    "text": "what should I do first to get this release out",
+    "expected": "Planning"
+  },
+  {
+    "text": "outline a roadmap for the migration",
+    "expected": "Planning"
+  },
+  {
+    "text": "prioritise the backlog for this sprint",
+    "expected": "Planning"
+  },
+  {
+    "text": "estimate how long each of these phases will take",
+    "expected": "Planning"
+  },
+  {
+    "text": "give me next steps for finishing the integration",
+    "expected": "Planning"
+  },
+  {
+    "text": "sequence these tasks so nothing blocks",
+    "expected": "Planning"
+  },
+  {
+    "text": "document this module in the readme",
+    "expected": "Documentation"
+  },
+  {
+    "text": "write docs for the public API surface",
+    "expected": "Documentation"
+  },
+  {
+    "text": "add docstrings to every exported function",
+    "expected": "Documentation"
+  },
+  {
+    "text": "update the changelog for this release",
+    "expected": "Documentation"
+  },
+  {
+    "text": "write a usage guide for new contributors",
+    "expected": "Documentation"
+  },
+  {
+    "text": "generate api docs from these types",
+    "expected": "Documentation"
+  },
+  {
+    "text": "write a tutorial for setting the project up",
+    "expected": "Documentation"
+  },
+  {
+    "text": "add comments explaining the tricky part of this algorithm",
+    "expected": "Documentation"
+  },
+  {
+    "text": "write unit tests for the pricing calculator",
+    "expected": "Testing"
+  },
+  {
+    "text": "add integration tests for the checkout flow",
+    "expected": "Testing"
+  },
+  {
+    "text": "this test is flaky, make it deterministic",
+    "expected": "Testing"
+  },
+  {
+    "text": "increase coverage on the parser module",
+    "expected": "Testing"
+  },
+  {
+    "text": "mock the http client in these tests",
+    "expected": "Testing"
+  },
+  {
+    "text": "write a playwright test for the login page",
+    "expected": "Testing"
+  },
+  {
+    "text": "add a fixture that represents a cancelled order",
+    "expected": "Testing"
+  },
+  {
+    "text": "convert these jest tests to vitest",
+    "expected": "Testing"
+  },
+  {
+    "text": "write test cases for the boundary conditions",
+    "expected": "Testing"
+  },
+  {
+    "text": "add an assertion that the retry only happens twice",
+    "expected": "Testing"
+  },
+  {
+    "text": "deploy this to the staging swarm",
+    "expected": "DevOps"
+  },
+  {
+    "text": "write a dockerfile for the production build",
+    "expected": "DevOps"
+  },
+  {
+    "text": "set up github actions to run the test suite",
+    "expected": "DevOps"
+  },
+  {
+    "text": "configure nginx to proxy the api",
+    "expected": "DevOps"
+  },
+  {
+    "text": "the kubernetes pod keeps restarting after rollout",
+    "expected": "DevOps"
+  },
+  {
+    "text": "add terraform for the s3 bucket",
+    "expected": "DevOps"
+  },
+  {
+    "text": "how do I pass an environment variable into the container",
+    "expected": "DevOps"
+  },
+  {
+    "text": "set up monitoring for the queue depth",
+    "expected": "DevOps"
+  },
+  {
+    "text": "the ci pipeline is slow, speed up the docker build",
+    "expected": "DevOps"
+  },
+  {
+    "text": "provision a load balancer with an ssl certificate",
+    "expected": "DevOps"
+  },
+  {
+    "text": "dockerize this node service for production",
+    "expected": "DevOps"
+  },
+  {
+    "text": "configure the helm chart for the staging cluster",
+    "expected": "DevOps"
+  },
+  {
+    "text": "what architecture would suit a local first analytics app",
+    "expected": "Architecture"
+  },
+  {
+    "text": "should I use a monolith or microservices for this",
+    "expected": "Architecture"
+  },
+  {
+    "text": "design the data model for multi tenant billing",
+    "expected": "Architecture"
+  },
+  {
+    "text": "what are the trade offs of an event driven approach here",
+    "expected": "Architecture"
+  },
+  {
+    "text": "propose a system design that scales to a million rows",
+    "expected": "Architecture"
+  },
+  {
+    "text": "where should the boundaries between these layers sit",
+    "expected": "Architecture"
+  },
+  {
+    "text": "which design pattern fits this problem best",
+    "expected": "Architecture"
+  },
+  {
+    "text": "give me a high level design for the sync engine",
+    "expected": "Architecture"
+  },
+  {
+    "text": "draft a blog post about the new release",
+    "expected": "Writing"
+  },
+  {
+    "text": "write release notes for version two",
+    "expected": "Writing"
+  },
+  {
+    "text": "rephrase this paragraph so it reads less formal",
+    "expected": "Writing"
+  },
+  {
+    "text": "write an email announcing the maintenance window",
+    "expected": "Writing"
+  },
+  {
+    "text": "improve the tone of this landing page copy",
+    "expected": "Writing"
+  },
+  {
+    "text": "draft a proposal for the new pricing tier",
+    "expected": "Writing"
+  },
+  {
+    "text": "write a commit message for these changes",
+    "expected": "Writing"
+  },
+  {
+    "text": "reword the marketing copy on the pricing page",
+    "expected": "Writing"
+  },
+  {
+    "text": "hmm",
+    "expected": "Other"
+  },
+  {
+    "text": "ok",
+    "expected": "Other"
+  },
+  {
+    "text": "continue",
+    "expected": "Other"
+  },
+  {
+    "text": "thanks that worked",
+    "expected": "Other"
+  },
+  {
+    "text": "go ahead",
+    "expected": "Other"
+  },
+  {
+    "text": "yes please",
+    "expected": "Other"
+  },
+  {
+    "text": "one more thing",
+    "expected": "Other"
+  },
+  {
+    "text": "never mind",
+    "expected": "Other"
+  },
+  {
+    "text": "what about the other one",
+    "expected": "Other"
+  },
+  {
+    "text": "try again",
+    "expected": "Other"
+  },
+  {
+    "text": "looks good",
+    "expected": "Other"
+  },
+  {
+    "text": "keep going",
+    "expected": "Other"
+  },
+  {
+    "text": "do it",
+    "expected": "Other"
+  },
+  {
+    "text": "same as before",
+    "expected": "Other"
+  },
+  {
+    "text": "and then",
+    "expected": "Other"
+  },
+  {
+    "text": "draw up a plan for migrating the database",
+    "expected": "Planning"
+  },
+  {
+    "text": "break the release into phases with a milestone each",
+    "expected": "Planning"
+  },
+  {
+    "text": "write documentation for the cli flags",
+    "expected": "Documentation"
+  },
+  {
+    "text": "document the migration steps in the readme",
+    "expected": "Documentation"
+  },
+  {
+    "text": "what is the right architecture for offline sync",
+    "expected": "Architecture"
+  },
+  {
+    "text": "system design review for the ingestion path",
+    "expected": "Architecture"
+  },
+  {
+    "text": "write a newsletter about this quarter",
+    "expected": "Writing"
+  },
+  {
+    "text": "draft an announcement post for the launch",
+    "expected": "Writing"
+  },
+  {
+    "text": "review this file and flag anything risky",
+    "expected": "Code Review"
+  },
+  {
+    "text": "code review please, focus on concurrency",
+    "expected": "Code Review"
+  },
+  {
+    "text": "explain how this cache invalidation works",
+    "expected": "Explanation"
+  },
+  {
+    "text": "what is a promise chain in this context",
+    "expected": "Explanation"
+  },
+  {
+    "text": "research local embedding models that run offline",
+    "expected": "Research"
+  },
+  {
+    "text": "compare three options for background jobs",
+    "expected": "Research"
+  },
+  {
+    "text": "write a snapshot test for the header",
+    "expected": "Testing"
+  },
+  {
+    "text": "add tests covering the empty state",
+    "expected": "Testing"
+  },
+  {
+    "text": "tidy up the helpers folder",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "extract this into a shared hook",
+    "expected": "Refactoring"
+  },
+  {
+    "text": "the response is empty but the query returns rows",
+    "expected": "Debugging"
+  },
+  {
+    "text": "why does it fail only in production",
+    "expected": "Debugging"
+  }
+]
