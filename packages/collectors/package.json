@@ -1,0 +1,21 @@
+{
+  "name": "@ai-footprint/collectors",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ai-footprint/analytics": "1.0.0",
+    "@ai-footprint/config": "1.0.0",
+    "@ai-footprint/database": "1.0.0",
+    "@ai-footprint/shared": "1.0.0"
+  }
+}
