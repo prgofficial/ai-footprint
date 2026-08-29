@@ -1,0 +1,32 @@
+{
+  "name": "@ai-footprint/api",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ai-footprint/analytics": "1.0.0",
+    "@ai-footprint/collectors": "1.0.0",
+    "@ai-footprint/config": "1.0.0",
+    "@ai-footprint/database": "1.0.0",
+    "@ai-footprint/shared": "1.0.0",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "express": "^5.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0"
+  }
+}
