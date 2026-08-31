@@ -1,0 +1,54 @@
+# Docker Swarm stack. There is no docker-compose.yml in this project and there must not be.
+#
+#   docker swarm init                                   (once)
+#   npm run docker:build                                (stack deploy cannot build)
+#   docker stack deploy -c docker/stack.yml ai-footprint
+#   docker stack services ai-footprint
+#   docker stack rm ai-footprint                        (your data survives)
+
+version: '3.8'
+
+services:
+  app:
+    image: ai-footprint:local
+    environment:
+      AI_FOOTPRINT_MODE: docker
+      AI_FOOTPRINT_HOME: /data
+      AI_FOOTPRINT_PORT: '4173'
+      AI_FOOTPRINT_LOG_LEVEL: info
+      # So the UI can name the real location of the user's data, not the container path.
+      AI_FOOTPRINT_HOST_DATA: ${AI_FOOTPRINT_DATA:-/tmp/ai-footprint}
+      TZ: ${TZ:-UTC}
+    ports:
+      # host mode binds the port directly on this node instead of routing it through the
+      # ingress mesh. A single-machine application has no use for the mesh, and the mesh is
+      # what virtualised Docker hosts fail to forward to the host OS.
+      - target: 4173
+        published: ${AI_FOOTPRINT_PORT:-4173}
+        protocol: tcp
+        mode: host
+    volumes:
+      # The database lives on the host. Removing and redeploying the stack cannot lose it.
+      - type: bind
+        source: ${AI_FOOTPRINT_DATA:-/tmp/ai-footprint}
+        target: /data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:4173/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          memory: 128M
