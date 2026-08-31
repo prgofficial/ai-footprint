@@ -50,4 +50,6 @@ export function banner({ url, dataDirectory, mode }) {
   line(`  ${dim('Data')}  ${dataDirectory}`);
   line(`  ${dim('Mode')}  ${mode}`);
   line();
+  line(`  ${dim('Built by')} Zyfolks Technologies ${dim('·')} ${dim('zyfolks.com')}`);
+  line();
 }

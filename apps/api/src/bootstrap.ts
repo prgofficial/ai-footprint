@@ -2,7 +2,14 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter, type NestExpressApplication } from '@nestjs/platform-express';
 import express from 'express';
-import { APP_NAME, APP_TAGLINE, DEFAULT_APP_PORT } from '@ai-footprint/shared';
+import {
+  APP_NAME,
+  APP_TAGLINE,
+  DEFAULT_APP_PORT,
+  INGEST_BODY_LIMIT,
+  VENDOR_DOMAIN,
+  VENDOR_NAME,
+} from '@ai-footprint/shared';
 import {
   createLogger,
   findFreePort,
@@ -47,8 +54,12 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Running
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule,
     new ExpressAdapter(server),
-    { logger: false, bodyParser: true },
+    { logger: false, bodyParser: false },
   );
+  // The ingest schema documents batches of up to 2000 events; Express defaults to 100 kB, so
+  // the documented maximum was unsendable and failed as an opaque 500. Sized for a full batch
+  // of prompt-and-response events with room to spare.
+  app.useBodyParser('json', { limit: INGEST_BODY_LIMIT });
 
   // Plan §2.3: same-origin only, so there is no CORS surface to get wrong.
   app.enableCors({ origin: false });
@@ -124,6 +135,8 @@ function printBanner(url: string, dataDirectory: string, mode: 'native' | 'docke
     `  App    ${url}`,
     `  Data   ${dataDirectory}`,
     `  Mode   ${mode}`,
+    '',
+    `  Built by ${VENDOR_NAME} · ${VENDOR_DOMAIN}`,
     '',
     '  Press Ctrl+C to stop.',
     '',

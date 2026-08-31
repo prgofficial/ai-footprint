@@ -2,6 +2,8 @@
 
 **Understand how you use AI.**
 
+Built by [Zyfolks Technologies](https://zyfolks.com) · open source under the MIT licence.
+
 AI Footprint turns the activity your AI coding assistants already write to your own disk
 into analytics about how you actually work: what you bring to AI, which projects and
 technologies dominate, when you work, and how that changes over time.
@@ -240,3 +242,10 @@ packages/collectors provider interface and the Claude Code adapter
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
 [SECURITY.md](SECURITY.md). Licensed under the [MIT License](LICENSE).
+
+---
+
+<p align="center">
+  Built and open-sourced by <a href="https://zyfolks.com"><strong>Zyfolks Technologies</strong></a><br />
+  <sub><a href="https://zyfolks.com">zyfolks.com</a></sub>
+</p>

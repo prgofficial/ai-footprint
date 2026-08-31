@@ -24,6 +24,17 @@ export interface IngestOptions {
   deferAggregates?: boolean;
 }
 
+/**
+ * A tool pushing through the ingest endpoint has no adapter and so no providers row, and
+ * `events.provider_id` is a foreign key onto it. An adapter that registers later replaces
+ * this name with its own.
+ */
+function displayNameFor(providerId: string): string {
+  const words = providerId.split(/[-_.\s]+/).filter(Boolean);
+  if (words.length === 0) return providerId;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
 function sessionRowId(providerId: string, externalSessionId: string): string {
   return createHash('sha256')
     .update(`${providerId}|${externalSessionId}`)
@@ -69,6 +80,31 @@ export class IngestService {
   }
 
   /**
+   * Registers a provider the first time it is seen and reports whether it is accepting data.
+   * "Pause collection" has to mean paused for a tool that pushes as much as for one we pull
+   * from, or the badge reads paused while the event count climbs.
+   */
+  private resolveProvider(
+    providerId: string,
+    cache: Map<string, 'ok' | 'paused'>,
+  ): 'ok' | 'paused' {
+    const cached = cache.get(providerId);
+    if (cached) return cached;
+
+    const store = this.stores.store;
+    const existing = store.providers.get(providerId);
+    if (!existing) {
+      store.providers.register(providerId, displayNameFor(providerId));
+      cache.set(providerId, 'ok');
+      this.logger.info({ providerId }, 'registered a provider from its first ingest');
+      return 'ok';
+    }
+    const state = existing.enabled ? 'ok' : 'paused';
+    cache.set(providerId, state);
+    return state;
+  }
+
+  /**
    * The one path into the database. Backfill, the realtime watch, hooks and the ingest
    * endpoint all funnel through here, so idempotency, redaction, project inference and
    * rollup maintenance can never be bypassed.
@@ -104,7 +140,9 @@ export class IngestService {
     };
 
     const records: IngestRecord[] = [];
+    const registered = new Map<string, 'ok' | 'paused'>();
     let failed = 0;
+    let skipped = 0;
 
     for (const raw of events) {
       const parsed = aiEventInputSchema.safeParse({
@@ -117,9 +155,21 @@ export class IngestService {
       }
       let record: IngestRecord;
       try {
-        record = normalize({ ...parsed.data, providerId: options.providerId }, normalizeOptions);
+        // The schema accepts a per-event providerId, so it is honoured. Overriding it with the
+        // batch's silently re-attributed a mixed batch, and made re-importing an export
+        // collapse every tool into one.
+        record = normalize(
+          { ...parsed.data, providerId: parsed.data.providerId ?? options.providerId },
+          normalizeOptions,
+        );
       } catch {
         failed += 1;
+        continue;
+      }
+
+      const provider = this.resolveProvider(record.event.providerId, registered);
+      if (provider === 'paused') {
+        skipped += 1;
         continue;
       }
       records.push(record);
@@ -188,6 +238,10 @@ export class IngestService {
       for (const day of outcome.touchedDays) touchedDays.set(`${day.day}|${day.providerId}`, day);
     }
 
+    // A session row is written before its events, so a batch of pure duplicates leaves one
+    // behind with nothing in it.
+    if (sessionsSeen.size > 0) store.sessions.pruneEmpty([...sessionsSeen.keys()]);
+
     if (options.deferAggregates) {
       for (const sessionId of sessionsSeen.keys()) this.pendingSessions.add(sessionId);
       for (const [key, day] of touchedDays) this.pendingDays.set(key, day);
@@ -228,10 +282,17 @@ export class IngestService {
     });
 
     this.logger.debug(
-      { providerId: options.providerId, source: options.source, accepted, deduped, failed },
+      {
+        providerId: options.providerId,
+        source: options.source,
+        accepted,
+        deduped,
+        failed,
+        skipped,
+      },
       'ingest batch complete',
     );
 
-    return { accepted, deduped, failed, batchId };
+    return { accepted, deduped, failed, skipped, batchId };
   }
 }

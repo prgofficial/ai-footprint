@@ -11,6 +11,7 @@ import {
 } from '@/lib/queries';
 import { useBackfillProgress } from '@/hooks/useBackfillProgress';
 import { formatBytes, formatExact } from '@/lib/utils';
+import { APP_NAME, VENDOR_NAME, VENDOR_URL } from '@ai-footprint/shared';
 
 const PROVIDER = 'claude-code';
 
@@ -34,6 +35,18 @@ export function WizardPage() {
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col justify-center py-10">
       <header className="mb-8">
+        <p className="mb-3 text-2xs text-subtle">
+          <span className="font-medium tracking-wide text-muted uppercase">{APP_NAME}</span>
+          {' from '}
+          <a
+            href={VENDOR_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="font-medium text-muted underline-offset-2 transition-colors hover:text-accent hover:underline"
+          >
+            {VENDOR_NAME}
+          </a>
+        </p>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">
           Understand how you use AI.
         </h1>

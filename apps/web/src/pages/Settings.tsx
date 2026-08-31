@@ -14,7 +14,12 @@ import {
   useUpdateSettings,
 } from '@/lib/queries';
 import { formatBytes, formatExact, formatRelative } from '@/lib/utils';
-import type { SettingsResponse } from '@ai-footprint/shared';
+import {
+  APP_NAME,
+  VENDOR_NAME,
+  VENDOR_URL,
+  type SettingsResponse,
+} from '@ai-footprint/shared';
 
 function Toggle({
   label,
@@ -387,6 +392,39 @@ export function SettingsPage() {
                 </li>
               ))}
             </ul>
+          </Card>
+
+          <Card>
+            <CardHeader title="About" description="What this is, and who built it" />
+            <dl className="divide-y divide-line text-xs">
+              <div className="flex items-baseline justify-between gap-4 px-5 py-2.5">
+                <dt className="text-subtle">Application</dt>
+                <dd className="truncate text-ink">
+                  {APP_NAME} v{config.data?.version ?? '—'}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4 px-5 py-2.5">
+                <dt className="text-subtle">Built by</dt>
+                <dd className="truncate">
+                  <a
+                    href={VENDOR_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-medium text-accent underline-offset-2 hover:underline"
+                  >
+                    {VENDOR_NAME}
+                  </a>
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4 px-5 py-2.5">
+                <dt className="text-subtle">Licence</dt>
+                <dd className="text-ink">MIT — open source</dd>
+              </div>
+            </dl>
+            <p className="px-5 pt-1 pb-5 text-2xs leading-relaxed text-subtle">
+              The link above is the only address in this application, and it is never opened for
+              you. Nothing is sent anywhere.
+            </p>
           </Card>
 
           <Section className="lg:col-span-2">

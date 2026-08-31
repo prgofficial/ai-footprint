@@ -19,24 +19,24 @@ ON CONFLICT (dedupe_key) DO NOTHING
 RETURNING id`;
 
 /**
- * G2: a re-scan, a hook retry, a crash mid-backfill and a stack redeploy must all be safe.
- * Insert is keyed on the deterministic dedupe key; a conflict updates only the columns that
- * can legitimately improve on a second sighting, and never duplicates a row.
+ * G2: re-scans, hook retries and crashed backfills must all be safe. Keyed on the deterministic
+ * dedupe key; a conflict only fills columns the stored row still lacks. The stored value always
+ * wins, or a collision rewrites the survivor's model, tokens, session and project.
  */
 const REFRESH_EVENT = `
 UPDATE events SET
-  model = COALESCE(@model, model),
-  model_family = COALESCE(@modelFamily, model_family),
-  session_id = COALESCE(@sessionId, session_id),
-  project_id = COALESCE(@projectId, project_id),
-  input_tokens = COALESCE(@inputTokens, input_tokens),
-  output_tokens = COALESCE(@outputTokens, output_tokens),
-  cache_read_tokens = COALESCE(@cacheReadTokens, cache_read_tokens),
-  cache_write_tokens = COALESCE(@cacheWriteTokens, cache_write_tokens),
-  estimated_cost_usd = COALESCE(@estimatedCostUsd, estimated_cost_usd),
-  duration_ms = COALESCE(@durationMs, duration_ms),
-  git_branch = COALESCE(@gitBranch, git_branch),
-  repository = COALESCE(@repository, repository)
+  model = COALESCE(model, @model),
+  model_family = COALESCE(model_family, @modelFamily),
+  session_id = COALESCE(session_id, @sessionId),
+  project_id = COALESCE(project_id, @projectId),
+  input_tokens = COALESCE(input_tokens, @inputTokens),
+  output_tokens = COALESCE(output_tokens, @outputTokens),
+  cache_read_tokens = COALESCE(cache_read_tokens, @cacheReadTokens),
+  cache_write_tokens = COALESCE(cache_write_tokens, @cacheWriteTokens),
+  estimated_cost_usd = COALESCE(estimated_cost_usd, @estimatedCostUsd),
+  duration_ms = COALESCE(duration_ms, @durationMs),
+  git_branch = COALESCE(git_branch, @gitBranch),
+  repository = COALESCE(repository, @repository)
 WHERE dedupe_key = @dedupeKey AND ingest_version <= @ingestVersion`;
 
 const INSERT_PROMPT = `
@@ -130,6 +130,9 @@ export class EventRepository {
         if (!inserted) {
           this.refreshEvent.run(params);
           outcome.deduped += 1;
+          // A refresh can fill a column that was null, and the rollups summarise those
+          // columns. Marking the day dirty is far cheaper than letting them drift.
+          days.add(`${event.localDate}|${event.providerId}`);
           continue;
         }
 

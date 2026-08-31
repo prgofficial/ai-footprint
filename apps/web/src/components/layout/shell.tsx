@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Circle, Moon, Sun } from 'lucide-react';
 import { useHealth, useSystemConfig } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+import { VENDOR_NAME, VENDOR_URL } from '@ai-footprint/shared';
 import { Button } from '../ui/primitives';
 
 const NAV = [
@@ -126,13 +127,24 @@ export function AppShell() {
         <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-subtle">
           <span>Everything stays on this machine.</span>
           {config.data ? (
-            <>
-              <span className="font-mono">
-                {config.data.hostDataDirectory ?? config.data.dataDirectory}
-              </span>
-              <span className="ml-auto">v{config.data.version}</span>
-            </>
+            <span className="font-mono">
+              {config.data.hostDataDirectory ?? config.data.dataDirectory}
+            </span>
           ) : null}
+          <span className="ml-auto flex items-center gap-3">
+            <span>
+              Built by{' '}
+              <a
+                href={VENDOR_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-medium text-muted underline-offset-2 transition-colors hover:text-accent hover:underline"
+              >
+                {VENDOR_NAME}
+              </a>
+            </span>
+            {config.data ? <span>v{config.data.version}</span> : null}
+          </span>
         </div>
       </footer>
     </div>

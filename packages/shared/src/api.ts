@@ -367,5 +367,7 @@ export interface IngestResult {
   accepted: number;
   deduped: number;
   failed: number;
+  /** Dropped because the provider is paused. Not an error, and not silent. */
+  skipped: number;
   batchId: string;
 }

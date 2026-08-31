@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Understand how you use AI. Local-first analytics for AI coding assistants.",
+  "author": "Zyfolks Technologies (https://zyfolks.com)",
+  "homepage": "https://zyfolks.com",
   "license": "MIT",
   "type": "commonjs",
   "engines": {

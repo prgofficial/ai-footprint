@@ -2,11 +2,20 @@ export const APP_NAME = 'AI Footprint';
 export const APP_TAGLINE = 'Understand how you use AI.';
 export const APP_DIR_NAME = 'ai-footprint';
 
+/** Attribution, in one place, so every surface says the same thing. */
+export const VENDOR_NAME = 'Zyfolks Technologies';
+export const VENDOR_SHORT = 'Zyfolks';
+export const VENDOR_URL = 'https://zyfolks.com';
+export const VENDOR_DOMAIN = 'zyfolks.com';
+
 export const DEFAULT_APP_PORT = 4173;
 
 export const INGEST_TOKEN_HEADER = 'x-ai-footprint-token';
 
 export const INGEST_BATCH_SIZE = 500;
+
+/** Must comfortably hold `ingestBatchSchema`'s 2000-event maximum, or that cap is a fiction. */
+export const INGEST_BODY_LIMIT = '32mb';
 
 /** Gap longer than this between two events in a session is treated as idle, not work. */
 export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000;

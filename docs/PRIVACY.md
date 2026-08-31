@@ -70,6 +70,10 @@ rebinding from a browser tab. Ingestion requires a token stored `0600` in
 A lint rule forbids `fetch` in the collector and API source, so there is no code path out of
 the machine to review.
 
+The one external address anywhere in the product is `https://zyfolks.com`, the credit in the
+footer, the welcome screen and Settings. It is a plain link: nothing fetches it, and it only
+opens if you click it.
+
 ## Your data, your call
 
 From **Settings**:

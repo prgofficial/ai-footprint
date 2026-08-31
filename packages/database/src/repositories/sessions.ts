@@ -124,6 +124,24 @@ export class SessionRepository {
     run(sessionIds);
   }
 
+  /**
+   * A row is written for every session a batch mentions, including those whose events all
+   * turned out to be duplicates. Those leave zero-event sessions that both the session list
+   * and the rollups count. Returns how many were removed.
+   */
+  pruneEmpty(sessionIds: string[]): number {
+    if (sessionIds.length === 0) return 0;
+    const placeholders = sessionIds.map(() => '?').join(', ');
+    const result = this.connection
+      .prepare(
+        `DELETE FROM sessions
+          WHERE id IN (${placeholders})
+            AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id)`,
+      )
+      .run(...sessionIds);
+    return result.changes;
+  }
+
   orphanedSessionIds(): string[] {
     return this.db
       .select({ id: sessions.id })

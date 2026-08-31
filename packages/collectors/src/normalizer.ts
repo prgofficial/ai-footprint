@@ -44,6 +44,7 @@ export function normalize(
     eventType: input.eventType,
     timestamp,
     discriminator: input.toolName ?? null,
+    contentHash: input.externalId ? null : contentIdentity(input),
   });
 
   const estimatedCostUsd = estimateCostUsd(modelFamily, input);
@@ -120,6 +121,28 @@ export function normalize(
   }
 
   return record;
+}
+
+/**
+ * What distinguishes two events from a source with no stable id. Byte-identical submissions
+ * still collapse; two different events in the same millisecond stay two.
+ */
+function contentIdentity(input: AIEventInput & { providerId: string }): string {
+  return sha256(
+    JSON.stringify([
+      input.sessionId ?? '',
+      input.parentEventId ?? '',
+      input.model ?? '',
+      input.workingDirectory ?? '',
+      input.toolName ?? '',
+      input.prompt ?? '',
+      input.response ?? '',
+      input.inputTokens ?? null,
+      input.outputTokens ?? null,
+      input.cacheReadTokens ?? null,
+      input.cacheWriteTokens ?? null,
+    ]),
+  );
 }
 
 function extensionFromMetadata(metadata: unknown): string | null {

@@ -50,10 +50,19 @@ export function dedupeKeyInput(parts: {
   eventType: string;
   timestamp: string;
   discriminator?: string | null;
+  /**
+   * Stands in for `externalId` when the source has no stable id. Without it two unrelated
+   * events sharing a millisecond collapse into one, and the survivor inherits the other's
+   * session, project, model and tokens.
+   */
+  contentHash?: string | null;
 }): string {
+  // A source that mints stable ids is trusted to have made them unique, so its key is
+  // byte-identical to what it has always been and a re-scan still dedupes exactly.
+  const identity = parts.externalId || (parts.contentHash ? `#${parts.contentHash}` : '');
   return [
     parts.providerId,
-    parts.externalId ?? '',
+    identity,
     parts.eventType,
     parts.timestamp,
     parts.discriminator ?? '',
