@@ -224,12 +224,15 @@ export const dailyRollups = sqliteTable(
     prompts: integer('prompts').notNull().default(0),
     responses: integer('responses').notNull().default(0),
     toolCalls: integer('tool_calls').notNull().default(0),
+    otherEvents: integer('other_events').notNull().default(0),
     sessions: integer('sessions').notNull().default(0),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),
     cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
     cacheWriteTokens: integer('cache_write_tokens').notNull().default(0),
-    estimatedCostUsd: real('estimated_cost_usd').notNull().default(0),
+    /** Nullable: unknown is not free. */
+    estimatedCostUsd: real('estimated_cost_usd'),
+    confidenceSum: real('confidence_sum').notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.day, t.providerId, t.projectId, t.model, t.category] }),

@@ -116,6 +116,7 @@ export class MaintenanceRepository {
           'sessions',
           'projects',
           'daily_rollups',
+          'daily_active',
           'collector_state',
           'ingest_log',
         ]) {
@@ -137,7 +138,11 @@ export class MaintenanceRepository {
           'DELETE FROM projects WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.project_id = projects.id)',
         )
         .run();
+      // Both derived tables, not just one. daily_active was never pruned, so a deleted
+      // provider's active time kept appearing in every range longer than a week (across
+      // restarts, with no repair path) while short ranges correctly reported it gone.
       this.connection.prepare('DELETE FROM daily_rollups').run();
+      this.connection.prepare('DELETE FROM daily_active').run();
       if (scope.scope === 'provider' && scope.providerId) {
         this.connection
           .prepare('DELETE FROM collector_state WHERE provider_id = ?')

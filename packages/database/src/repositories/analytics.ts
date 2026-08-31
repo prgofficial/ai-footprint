@@ -105,16 +105,16 @@ export class AnalyticsRepository {
   }
 
   /**
-   * §6.4 applied to whatever slice is being asked about: consecutive events inside the
-   * range, per session, with each gap clamped to the idle timeout. Summing stored session
-   * totals instead would credit a whole session to the day it started on.
+   * §6.4 over the requested slice: consecutive events per session, each gap clamped to the idle
+   * timeout, plus one tail allowance per session-DAY. Per session-day because that is what
+   * `daily_active` charges; per session made short and long ranges disagree.
    */
   activeMs(filters: EventFilters, idleTimeoutMs = 300_000, tailAllowanceMs = 60_000): number {
     const where = buildEventWhere(filters);
     const row = this.connection
       .prepare(
         `WITH ordered AS (
-           SELECT e.session_id AS sid, e.timestamp AS ts,
+           SELECT e.session_id AS sid, e.local_date AS day, e.timestamp AS ts,
                   LAG(e.timestamp) OVER (PARTITION BY e.session_id ORDER BY e.timestamp) AS prev
            FROM events e WHERE ${where.sql} AND e.session_id IS NOT NULL
          )
@@ -123,10 +123,10 @@ export class AnalyticsRepository {
              SELECT SUM(MIN(MAX((julianday(ts) - julianday(prev)) * 86400000, 0), ?))
              FROM ordered WHERE prev IS NOT NULL
            ), 0) AS gaps,
-           (SELECT COUNT(DISTINCT sid) FROM ordered) AS sessions`,
+           (SELECT COUNT(DISTINCT sid || '|' || day) FROM ordered) AS sessionDays`,
       )
-      .get(...where.params, idleTimeoutMs) as { gaps: number; sessions: number };
-    return Math.round(row.gaps) + row.sessions * tailAllowanceMs;
+      .get(...where.params, idleTimeoutMs) as { gaps: number; sessionDays: number };
+    return Math.round(row.gaps) + row.sessionDays * tailAllowanceMs;
   }
 
   buckets(filters: EventFilters, granularity: 'hour' | 'day' | 'week'): BucketRow[] {
@@ -164,7 +164,9 @@ export class AnalyticsRepository {
       .prepare(
         `WITH ordered AS (
            SELECT e.local_date AS day, e.session_id AS sid, e.timestamp AS ts,
-                  LAG(e.timestamp) OVER (PARTITION BY e.session_id, e.local_date ORDER BY e.timestamp) AS prev
+                  -- Partitioned by session alone, so the gap that spans midnight is measured
+                  -- and charged to the day of its later event instead of being discarded.
+                  LAG(e.timestamp) OVER (PARTITION BY e.session_id ORDER BY e.timestamp) AS prev
            FROM events e WHERE ${where.sql} AND e.session_id IS NOT NULL
          )
          SELECT day,

@@ -103,23 +103,27 @@ export class AnalyticsService {
       technology: query.technology,
     };
 
-    const filters = { ...shared, from: range.from, to: range.to };
     const days = {
       from: localDateIn(timezone, new Date(range.from)),
       to: localDateIn(timezone, new Date(range.to)),
     };
+    const previousDays = {
+      from: localDateIn(timezone, new Date(range.previousFrom)),
+      to: localDateIn(timezone, new Date(range.previousTo)),
+    };
+    // Day bounds, not instants: the rollups are keyed on the event's own local date, and the
+    // two paths have to select the same events or a range can contain an event its superset
+    // does not.
+    const filters = { ...shared, fromDay: days.from, toDay: days.to };
     const spanDays = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
 
     return {
       range,
       filters,
-      previous: { ...shared, from: range.previousFrom, to: range.previousTo },
+      previous: { ...shared, fromDay: previousDays.from, toDay: previousDays.to },
       idleTimeoutMs: settings.idleTimeoutMinutes * 60_000,
       days,
-      previousDays: {
-        from: localDateIn(timezone, new Date(range.previousFrom)),
-        to: localDateIn(timezone, new Date(range.previousTo)),
-      },
+      previousDays,
       useRollups: spanDays > ROLLUP_THRESHOLD_DAYS && rollupsCanAnswer(filters),
     };
   }
@@ -253,9 +257,11 @@ export class AnalyticsService {
     const buckets = scope.useRollups
       ? store.rollupReads.buckets(filters, scope.days, granularity === 'week')
       : store.analytics.buckets(filters, granularity);
-    const activeByDay = scope.useRollups
-      ? store.rollupReads.activeMsByDay(filters, scope.days)
-      : store.analytics.activeMsByDay(filters, idleTimeoutMs, ACTIVE_TIME_TAIL_ALLOWANCE_MS);
+    // The rollups carry no project/model/category dimension for active time, so a filtered
+    // question falls back to the event log rather than being answered about everything.
+    const activeByDay =
+      (scope.useRollups ? store.rollupReads.activeMsByDay(filters, scope.days) : null) ??
+      store.analytics.activeMsByDay(filters, idleTimeoutMs, ACTIVE_TIME_TAIL_ALLOWANCE_MS);
 
     return {
       range,

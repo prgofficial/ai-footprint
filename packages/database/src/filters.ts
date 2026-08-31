@@ -1,6 +1,13 @@
 export interface EventFilters {
   from?: string;
   to?: string;
+  /**
+   * Local-day bounds, which REPLACE the instant bounds when present. Rollups are keyed on each
+   * event's own local date, so filtering the log by UTC instant put an event inside one path's
+   * window and outside the other's.
+   */
+  fromDay?: string;
+  toDay?: string;
   providerId?: string;
   projectId?: string;
   model?: string;
@@ -23,13 +30,24 @@ export function buildEventWhere(filters: EventFilters, alias = 'e'): WhereClause
   const clauses: string[] = [];
   const params: unknown[] = [];
 
-  if (filters.from) {
-    clauses.push(`${alias}.timestamp >= ?`);
-    params.push(filters.from);
-  }
-  if (filters.to) {
-    clauses.push(`${alias}.timestamp <= ?`);
-    params.push(filters.to);
+  if (filters.fromDay || filters.toDay) {
+    if (filters.fromDay) {
+      clauses.push(`${alias}.local_date >= ?`);
+      params.push(filters.fromDay);
+    }
+    if (filters.toDay) {
+      clauses.push(`${alias}.local_date <= ?`);
+      params.push(filters.toDay);
+    }
+  } else {
+    if (filters.from) {
+      clauses.push(`${alias}.timestamp >= ?`);
+      params.push(filters.from);
+    }
+    if (filters.to) {
+      clauses.push(`${alias}.timestamp <= ?`);
+      params.push(filters.to);
+    }
   }
   if (filters.providerId) {
     clauses.push(`${alias}.provider_id = ?`);

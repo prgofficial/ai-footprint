@@ -99,6 +99,13 @@ export class SessionRepository {
       ), 0) AS active
       FROM ordered WHERE prev IS NOT NULL`);
 
+    // One tail allowance per local day the session ran, matching daily_active and the
+    // documented rule. Charging it once per session made a multi-day session's stored total
+    // disagree with every range query that covered it.
+    const sessionDays = this.connection.prepare(
+      'SELECT COUNT(DISTINCT local_date) AS days FROM events WHERE session_id = ?',
+    );
+
     const setDerived = this.connection.prepare(`
       UPDATE sessions
       SET active_ms = ?,
@@ -117,7 +124,8 @@ export class SessionRepository {
         aggregate.run(now, id);
         const { n } = eventCount.get(id) as { n: number };
         const { active } = activeTime.get(id, idleTimeoutMs) as { active: number };
-        const total = n > 0 ? Math.round(active) + tailAllowanceMs : 0;
+        const { days } = sessionDays.get(id) as { days: number };
+        const total = n > 0 ? Math.round(active) + Math.max(days, 1) * tailAllowanceMs : 0;
         setDerived.run(total, id);
       }
     });

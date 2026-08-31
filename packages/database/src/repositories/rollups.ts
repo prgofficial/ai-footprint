@@ -8,8 +8,9 @@ import type { SqliteConnection } from '../client';
 const REBUILD_DAY = `
 INSERT INTO daily_rollups (
   day, provider_id, project_id, model, category,
-  prompts, responses, tool_calls, sessions,
-  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, estimated_cost_usd
+  prompts, responses, tool_calls, other_events, sessions,
+  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+  estimated_cost_usd, confidence_sum
 )
 SELECT
   e.local_date,
@@ -20,18 +21,28 @@ SELECT
   SUM(CASE WHEN e.event_type = 'prompt' THEN 1 ELSE 0 END),
   SUM(CASE WHEN e.event_type = 'response' THEN 1 ELSE 0 END),
   SUM(CASE WHEN e.event_type = 'tool_call' THEN 1 ELSE 0 END),
+  -- Everything else the event contract allows, so the rollup total equals COUNT(*).
+  SUM(CASE WHEN e.event_type NOT IN ('prompt','response','tool_call') THEN 1 ELSE 0 END),
   COUNT(DISTINCT e.session_id),
   COALESCE(SUM(e.input_tokens), 0),
   COALESCE(SUM(e.output_tokens), 0),
   COALESCE(SUM(e.cache_read_tokens), 0),
   COALESCE(SUM(e.cache_write_tokens), 0),
-  COALESCE(SUM(e.estimated_cost_usd), 0)
+  -- Deliberately not COALESCEd: a group with no priced model must stay null, or every range
+  -- longer than a week reports $0.00 where the event log reports "unknown".
+  SUM(e.estimated_cost_usd),
+  COALESCE(SUM(c.confidence), 0)
 FROM events e
 LEFT JOIN classifications c ON c.event_id = e.id
 WHERE e.local_date = ? AND e.provider_id = ?
 GROUP BY e.local_date, e.provider_id, COALESCE(e.project_id, ''), COALESCE(e.model, ''), COALESCE(c.category, '')`;
 
 /** Active time per (session, local day), same clamped-gap rule as §6.4, so day sums match. */
+/**
+ * Partitioned by session alone, each gap charged to the local day of its LATER event, so the
+ * gap across midnight is measured rather than dropped. The scan is not limited to the rebuilt
+ * day: the predecessor of its first event usually sits on the day before.
+ */
 const REBUILD_ACTIVE = `
 INSERT INTO daily_active (day, provider_id, active_ms, sessions)
 SELECT day, provider_id,
@@ -41,10 +52,13 @@ SELECT day, provider_id,
        COUNT(DISTINCT sid)
 FROM (
   SELECT e.local_date AS day, e.provider_id AS provider_id, e.session_id AS sid, e.timestamp AS ts,
-         LAG(e.timestamp) OVER (PARTITION BY e.session_id, e.local_date ORDER BY e.timestamp) AS prev
+         LAG(e.timestamp) OVER (PARTITION BY e.session_id ORDER BY e.timestamp) AS prev
   FROM events e
-  WHERE e.local_date = ? AND e.provider_id = ? AND e.session_id IS NOT NULL
+  WHERE e.provider_id = ? AND e.session_id IS NOT NULL
+    AND e.session_id IN (SELECT DISTINCT session_id FROM events
+                          WHERE local_date = ? AND provider_id = ? AND session_id IS NOT NULL)
 )
+WHERE day = ?
 GROUP BY day, provider_id`;
 
 export interface RollupDay {
@@ -76,7 +90,7 @@ export class RollupRepository {
         this.deleteDay.run(day, providerId);
         this.rebuildDay.run(day, providerId);
         this.deleteActive.run(day, providerId);
-        this.rebuildActive.run(idleTimeoutMs, tailAllowanceMs, day, providerId);
+        this.rebuildActive.run(idleTimeoutMs, tailAllowanceMs, providerId, day, providerId, day);
       }
     });
     run(days);

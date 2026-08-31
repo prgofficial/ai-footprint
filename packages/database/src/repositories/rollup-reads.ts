@@ -45,7 +45,7 @@ export class RollupReadRepository {
         `SELECT COALESCE(SUM(r.prompts), 0) AS prompts,
                 COALESCE(SUM(r.responses), 0) AS responses,
                 COALESCE(SUM(r.tool_calls), 0) AS toolCalls,
-                COALESCE(SUM(r.prompts + r.responses + r.tool_calls), 0) AS events,
+                COALESCE(SUM(r.prompts + r.responses + r.tool_calls + r.other_events), 0) AS events,
                 COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
                 COALESCE(SUM(r.output_tokens), 0) AS outputTokens,
                 COALESCE(SUM(r.cache_read_tokens), 0) AS cacheReadTokens,
@@ -78,7 +78,17 @@ export class RollupReadRepository {
     return row.activeMs;
   }
 
-  activeMsByDay(filters: EventFilters, days: { from: string; to: string }): Map<string, number> {
+  /**
+   * Null when the filter names a dimension `daily_active` does not carry, so the caller falls
+   * back to the event log. Reporting the whole workspace's active time next to a filtered
+   * prompt count in the same response is worse than reporting nothing.
+   */
+  activeMsByDay(
+    filters: EventFilters,
+    days: { from: string; to: string },
+  ): Map<string, number> | null {
+    if (filters.projectId || filters.model || filters.category) return null;
+
     const clauses = ['a.day >= ?', 'a.day <= ?'];
     const params: unknown[] = [days.from, days.to];
     if (filters.providerId) {
@@ -101,15 +111,50 @@ export class RollupReadRepository {
       .prepare(
         `SELECT ${bucketExpr} AS bucket,
                 COALESCE(SUM(r.prompts), 0) AS prompts,
-                0 AS sessions,
                 COALESCE(SUM(r.input_tokens), 0) AS inputTokens,
                 COALESCE(SUM(r.output_tokens), 0) AS outputTokens,
                 SUM(r.estimated_cost_usd) AS estimatedCostUsd
          FROM daily_rollups r WHERE ${where.sql}
          GROUP BY bucket ORDER BY bucket`,
       )
-      .all(...where.params) as Array<Omit<BucketRow, 'activeMs'>>;
-    return rows.map((row) => ({ ...row, activeMs: 0 }));
+      .all(...where.params) as Array<Omit<BucketRow, 'activeMs' | 'sessions'>>;
+
+    // daily_rollups.sessions is per (day, provider, project, model, category), so summing it
+    // counts one session once per dimension it touched. daily_active holds one honest count
+    // per day, which is the grain a bucket needs. It carries no project/model/category, so a
+    // query narrowed by those reports no session count rather than a wrong one.
+    const sessionsByBucket =
+      filters.projectId || filters.model || filters.category
+        ? new Map<string, number>()
+        : this.sessionsPerBucket(filters, days, weekly);
+
+    return rows.map((row) => ({
+      ...row,
+      sessions: sessionsByBucket.get(row.bucket) ?? 0,
+      activeMs: 0,
+    }));
+  }
+
+  private sessionsPerBucket(
+    filters: EventFilters,
+    days: { from: string; to: string },
+    weekly: boolean,
+  ): Map<string, number> {
+    const clauses = ['a.day >= ?', 'a.day <= ?'];
+    const params: unknown[] = [days.from, days.to];
+    if (filters.providerId) {
+      clauses.push('a.provider_id = ?');
+      params.push(filters.providerId);
+    }
+    const bucketExpr = weekly ? "strftime('%Y-W%W', a.day)" : 'a.day';
+    const rows = this.connection
+      .prepare(
+        `SELECT ${bucketExpr} AS bucket, COALESCE(SUM(a.sessions), 0) AS sessions
+         FROM daily_active a WHERE ${clauses.join(' AND ')}
+         GROUP BY bucket`,
+      )
+      .all(...params) as Array<{ bucket: string; sessions: number }>;
+    return new Map(rows.map((row) => [row.bucket, row.sessions]));
   }
 
   by(
@@ -164,41 +209,28 @@ export class RollupReadRepository {
       .prepare(
         `SELECT CASE WHEN r.category = '' THEN 'Other' ELSE r.category END AS key,
                 CASE WHEN r.category = '' THEN 'Other' ELSE r.category END AS name,
-                SUM(r.prompts) AS count, 0 AS avgConfidence
+                SUM(r.prompts) AS count,
+                CASE WHEN SUM(r.prompts) > 0
+                     THEN SUM(r.confidence_sum) / SUM(r.prompts) ELSE 0 END AS avgConfidence
          FROM daily_rollups r WHERE ${where.sql}
          GROUP BY key HAVING count > 0 ORDER BY count DESC`,
       )
       .all(...where.params) as Array<NamedCount & { avgConfidence: number }>;
   }
 
+  /**
+   * Counted from the event log, as the short-range path counts. Session rows carry no model or
+   * category to filter on, and counting overlapping intervals credited a long IDE session to
+   * every window it straddled, so an empty period could report sessions > 0.
+   */
   sessionsInRange(filters: EventFilters, range: { from: string; to: string }): number {
-    // A session row carries no model or category, and the rollups count sessions once per
-    // dimension row, so summing those would count a session again for every model it used.
-    // Both fall back to the event log, the same way active time does.
-    if (filters.model || filters.category) {
-      const where = buildEventWhere({ ...filters, from: range.from, to: range.to });
-      const row = this.connection
-        .prepare(
-          `SELECT COUNT(DISTINCT e.session_id) AS n FROM events e
-            WHERE ${where.sql} AND e.session_id IS NOT NULL`,
-        )
-        .get(...where.params) as { n: number };
-      return row.n;
-    }
-
-    const clauses = ['s.started_at <= ?', 'COALESCE(s.ended_at, s.started_at) >= ?'];
-    const params: unknown[] = [range.to, range.from];
-    if (filters.providerId) {
-      clauses.push('s.provider_id = ?');
-      params.push(filters.providerId);
-    }
-    if (filters.projectId) {
-      clauses.push('s.project_id = ?');
-      params.push(filters.projectId);
-    }
+    const where = buildEventWhere({ ...filters, from: range.from, to: range.to });
     const row = this.connection
-      .prepare(`SELECT COUNT(*) AS n FROM sessions s WHERE ${clauses.join(' AND ')}`)
-      .get(...params) as { n: number };
+      .prepare(
+        `SELECT COUNT(DISTINCT e.session_id) AS n FROM events e
+          WHERE ${where.sql} AND e.session_id IS NOT NULL`,
+      )
+      .get(...where.params) as { n: number };
     return row.n;
   }
 

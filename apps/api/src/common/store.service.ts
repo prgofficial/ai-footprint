@@ -60,8 +60,26 @@ export class StoreService implements OnModuleDestroy {
   }
 
   updateSettings(patch: Partial<SettingsResponse>): SettingsResponse {
+    const before = this.settings();
     this.store.settings.setMany(patch as Record<string, unknown>);
-    return this.settings();
+    const after = this.settings();
+
+    // `daily_active` is materialised with whatever idle timeout was in force when it was
+    // built, while short ranges recompute live. Without this, changing the setting the docs
+    // invite you to change left long ranges frozen on the old rule for ever, to the point
+    // where a 30-day range reported less active time than the 7 days inside it.
+    if (after.idleTimeoutMinutes !== before.idleTimeoutMinutes) {
+      const startedAt = Date.now();
+      const days = this.store.rollups.rebuildAll(
+        after.idleTimeoutMinutes * 60_000,
+        ACTIVE_TIME_TAIL_ALLOWANCE_MS,
+      );
+      getLogger().info(
+        { days, ms: Date.now() - startedAt, idleTimeoutMinutes: after.idleTimeoutMinutes },
+        'idle timeout changed, active time re-materialised',
+      );
+    }
+    return after;
   }
 
   onModuleDestroy(): void {

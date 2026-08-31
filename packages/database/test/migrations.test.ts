@@ -4,6 +4,13 @@ import { join } from 'node:path';
 import { Store } from '../src/store';
 import { createTempStore, type TempStore } from './helpers';
 
+function migrationIds(): string[] {
+  return readdirSync(join(__dirname, '..', 'migrations'))
+    .filter((file) => file.endsWith('.sql'))
+    .sort()
+    .map((file) => file.replace(/\.sql$/, ''));
+}
+
 let temp: TempStore | null = null;
 
 afterEach(() => {
@@ -15,11 +22,9 @@ describe('migrations', () => {
   it('creates the database from nothing and passes an integrity check', () => {
     temp = createTempStore();
     expect(existsSync(temp.store.databasePath)).toBe(true);
-    expect(temp.store.migration.applied).toEqual([
-      '0001_initial',
-      '0002_prompt_search',
-      '0003_prompt_model',
-    ]);
+    // Derived from the directory rather than hard-coded, so adding a migration does not mean
+    // editing this assertion, and a migration that fails to apply still fails the test.
+    expect(temp.store.migration.applied).toEqual(migrationIds());
     expect(temp.store.integrity()).toBe('ok');
   });
 
@@ -71,7 +76,7 @@ describe('migrations', () => {
       },
     });
     expect(reopened.migration.applied).toEqual([]);
-    expect(reopened.migration.alreadyApplied).toBe(3);
+    expect(reopened.migration.alreadyApplied).toBe(migrationIds().length);
     expect(reopened.migration.backupPath).toBeNull();
     expect(existsSync(backupDir) ? readdirSync(backupDir) : []).toHaveLength(0);
     reopened.close();
