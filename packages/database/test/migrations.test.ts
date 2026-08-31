@@ -15,7 +15,11 @@ describe('migrations', () => {
   it('creates the database from nothing and passes an integrity check', () => {
     temp = createTempStore();
     expect(existsSync(temp.store.databasePath)).toBe(true);
-    expect(temp.store.migration.applied).toEqual(['0001_initial', '0002_prompt_search']);
+    expect(temp.store.migration.applied).toEqual([
+      '0001_initial',
+      '0002_prompt_search',
+      '0003_prompt_model',
+    ]);
     expect(temp.store.integrity()).toBe('ok');
   });
 
@@ -67,7 +71,7 @@ describe('migrations', () => {
       },
     });
     expect(reopened.migration.applied).toEqual([]);
-    expect(reopened.migration.alreadyApplied).toBe(2);
+    expect(reopened.migration.alreadyApplied).toBe(3);
     expect(reopened.migration.backupPath).toBeNull();
     expect(existsSync(backupDir) ? readdirSync(backupDir) : []).toHaveLength(0);
     reopened.close();

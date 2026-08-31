@@ -1,5 +1,5 @@
 import type { SqliteConnection } from '../client';
-import type { EventFilters } from '../filters';
+import { buildEventWhere, type EventFilters } from '../filters';
 import type { BucketRow, NamedCount, Totals } from './analytics';
 
 /**
@@ -172,6 +172,20 @@ export class RollupReadRepository {
   }
 
   sessionsInRange(filters: EventFilters, range: { from: string; to: string }): number {
+    // A session row carries no model or category, and the rollups count sessions once per
+    // dimension row, so summing those would count a session again for every model it used.
+    // Both fall back to the event log, the same way active time does.
+    if (filters.model || filters.category) {
+      const where = buildEventWhere({ ...filters, from: range.from, to: range.to });
+      const row = this.connection
+        .prepare(
+          `SELECT COUNT(DISTINCT e.session_id) AS n FROM events e
+            WHERE ${where.sql} AND e.session_id IS NOT NULL`,
+        )
+        .get(...where.params) as { n: number };
+      return row.n;
+    }
+
     const clauses = ['s.started_at <= ?', 'COALESCE(s.ended_at, s.started_at) >= ?'];
     const params: unknown[] = [range.to, range.from];
     if (filters.providerId) {

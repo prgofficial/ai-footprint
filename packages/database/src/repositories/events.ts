@@ -55,6 +55,36 @@ VALUES (@eventId, @sessionId, @toolName, @succeeded, @durationMs, @targetExtensi
 ON CONFLICT (event_id) DO UPDATE SET
   succeeded = COALESCE(excluded.succeeded, tool_calls.succeeded)`;
 
+/**
+ * Transcripts stamp the model on the reply, never on the prompt, so prompts land with none and
+ * the dedupe key stops a re-scan correcting it. Attribute each to the first reply after it in
+ * the same session and on the same side of a subagent boundary, skipping `<synthetic>`.
+ * Unanswered prompts keep their null.
+ *
+ * INDEXED BY pins the partial index of unlinked prompts. Left to choose, the planner walks
+ * every prompt in the session and a watch scan costs 400ms instead of 4ms.
+ */
+const LINK_PROMPT_MODELS = (placeholders: string): string => `
+UPDATE events
+   SET model = a.model, model_family = a.model_family
+  FROM (
+    SELECT p.id AS pid, r.model AS model, r.model_family AS model_family
+      FROM events p INDEXED BY events_unlinked_prompt_idx
+      JOIN events r ON r.id = (
+        SELECT r2.id FROM events r2
+         WHERE r2.session_id = p.session_id
+           AND r2.is_subagent = p.is_subagent
+           AND r2.event_type = 'response'
+           AND r2.model IS NOT NULL
+           AND r2.model NOT LIKE '<%'
+           AND r2.timestamp >= p.timestamp
+         ORDER BY r2.timestamp
+         LIMIT 1)
+     WHERE p.event_type = 'prompt' AND p.model IS NULL AND p.session_id IN (${placeholders})
+  ) AS a
+ WHERE events.id = a.pid
+ RETURNING events.local_date AS day, events.provider_id AS providerId`;
+
 export class EventRepository {
   private readonly insertEvent;
   private readonly refreshEvent;
@@ -136,6 +166,22 @@ export class EventRepository {
       return { day: day as string, providerId: providerId as string };
     });
     return outcome;
+  }
+
+  /**
+   * Attributes any still-unattributed prompt in these sessions to the model that answered it.
+   * Returns the days it changed so the caller can rebuild their rollups: a reply can land on
+   * the far side of midnight from the prompt it answers.
+   */
+  linkPromptModels(sessionIds: string[]): Array<{ day: string; providerId: string }> {
+    if (sessionIds.length === 0) return [];
+    const rows = this.connection
+      .prepare(LINK_PROMPT_MODELS(sessionIds.map(() => '?').join(', ')))
+      .all(...sessionIds) as Array<{ day: string; providerId: string }>;
+
+    const days = new Map<string, { day: string; providerId: string }>();
+    for (const row of rows) days.set(`${row.day}|${row.providerId}`, row);
+    return [...days.values()];
   }
 
   countAll(): number {

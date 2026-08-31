@@ -48,15 +48,20 @@ export class IngestService {
     this.pendingSessions.clear();
     this.pendingDays.clear();
 
+    const touched = new Map(days.map((day) => [`${day.day}|${day.providerId}`, day]));
     if (sessions.length > 0) {
       store.sessions.recomputeMetrics(
         sessions,
         settings.idleTimeoutMinutes * 60_000,
         ACTIVE_TIME_TAIL_ALLOWANCE_MS,
       );
+      // Before the rollups are built, not after: they group prompts by model.
+      for (const day of store.events.linkPromptModels(sessions)) {
+        touched.set(`${day.day}|${day.providerId}`, day);
+      }
     }
-    if (days.length > 0) store.rollups.rebuild(days);
-    return { sessions: sessions.length, days: days.length };
+    if (touched.size > 0) store.rollups.rebuild([...touched.values()]);
+    return { sessions: sessions.length, days: touched.size };
   }
 
   hasPendingAggregates(): boolean {
@@ -193,6 +198,12 @@ export class IngestService {
           settings.idleTimeoutMinutes * 60_000,
           ACTIVE_TIME_TAIL_ALLOWANCE_MS,
         );
+        // A prompt reaches the database seconds before the reply that names its model, so the
+        // attribution is applied here rather than at mapping time. Before the rollups are
+        // built, not after: they group prompts by model.
+        for (const day of store.events.linkPromptModels([...sessionsSeen.keys()])) {
+          touchedDays.set(`${day.day}|${day.providerId}`, day);
+        }
       }
       if (touchedDays.size > 0) store.rollups.rebuild([...touchedDays.values()]);
     }

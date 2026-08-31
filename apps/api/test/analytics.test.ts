@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   INGEST_TOKEN_HEADER,
-  type OverviewResponse,
   type InsightsResponse,
+  type OverviewResponse,
+  type Paginated,
+  type PromptListItem,
 } from '@ai-footprint/shared';
 import { startTestApp, type TestApp } from './harness';
 
@@ -214,6 +216,36 @@ describe('overview headline metrics', () => {
     expect(week.models[0]?.share).toBeCloseTo(76.9, 1);
   });
 
+  it('filters the whole overview by model, from the event log', async () => {
+    // Prompts carry the model that answered them, so a model filter narrows every figure on
+    // the page instead of emptying the prompt-derived half of it.
+    const body = await api.json<OverviewResponse>(
+      '/api/analytics/overview?range=7d&timezone=UTC&model=claude-sonnet-4-5',
+    );
+    expect(body.period.prompts.value).toBe(3);
+    expect(body.totals.prompts).toBe(3);
+    expect(body.categories.reduce((sum, row) => sum + row.prompts, 0)).toBe(3);
+    expect(body.projects.map((row) => row.name)).toEqual(['beta']);
+  });
+
+  it('filters the whole overview by model, from the rollups', async () => {
+    const body = await api.json<OverviewResponse>(
+      '/api/analytics/overview?range=30d&timezone=UTC&model=claude-opus-4-8',
+    );
+    expect(body.period.prompts.value).toBe(6 + 4 + 5);
+    expect(body.totals.prompts).toBe(6 + 4 + 5);
+    // Three of the five sessions used this model; the rollups cannot say so on their own.
+    expect(body.period.sessions.value).toBe(3);
+  });
+
+  it('narrows the prompt list by model too', async () => {
+    const body = await api.json<Paginated<PromptListItem>>(
+      '/api/analytics/prompts?range=all&timezone=UTC&model=claude-haiku-4-5&limit=50',
+    );
+    expect(body.items).toHaveLength(2);
+    expect(body.items.every((item) => item.model === 'claude-haiku-4-5')).toBe(true);
+  });
+
   it('counts models the same way from the rollups', async () => {
     const month = await overview('30d');
     const byModel = Object.fromEntries(month.models.map((row) => [row.model, row.responses]));
@@ -233,11 +265,20 @@ describe('aggregations', () => {
   });
 
   it('splits usage across models with token totals', async () => {
-    const models = await api.json<Array<{ model: string; events: number; outputTokens: number }>>(
-      '/api/analytics/models?range=all&timezone=UTC',
-    );
+    const models = await api.json<
+      Array<{
+        model: string;
+        events: number;
+        prompts: number;
+        responses: number;
+        outputTokens: number;
+      }>
+    >('/api/analytics/models?range=all&timezone=UTC');
     const opus = models.find((m) => m.model === 'claude-opus-4-8');
-    expect(opus?.events).toBe(6 + 4 + 5);
+    // Prompts are attributed to the model that answered them, so each pair counts twice.
+    expect(opus?.responses).toBe(6 + 4 + 5);
+    expect(opus?.prompts).toBe(6 + 4 + 5);
+    expect(opus?.events).toBe((6 + 4 + 5) * 2);
     expect(opus?.outputTokens).toBe((6 + 4 + 5) * 50);
   });
 

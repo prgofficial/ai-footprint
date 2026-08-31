@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { modelFamilyOf } from '@ai-footprint/shared';
 import { localStamp } from '../src/time';
 import { Store } from '../src/store';
 import type { IngestRecord } from '../src/types';
@@ -45,6 +46,8 @@ export interface FakeEventOptions {
   sessionId?: string | null;
   projectId?: string | null;
   model?: string | null;
+  modelFamily?: string | null;
+  isSubagent?: boolean;
   text?: string;
   tzOffsetMinutes?: number;
 }
@@ -57,6 +60,7 @@ export function fakeRecord(options: FakeEventOptions): IngestRecord {
   const stamp = localStamp(timestamp, tzOffsetMinutes);
   const id = `EVT${`${options.index}`.padStart(23, '0')}`;
   const text = options.text ?? `prompt number ${options.index}`;
+  const model = options.model === undefined ? 'claude-opus-4-8' : options.model;
 
   return {
     event: {
@@ -64,8 +68,8 @@ export function fakeRecord(options: FakeEventOptions): IngestRecord {
       dedupeKey: `${options.providerId ?? 'claude-code'}|ext-${options.index}|${eventType}|${timestamp}`,
       providerId: options.providerId ?? 'claude-code',
       product: 'Claude Code',
-      model: options.model === undefined ? 'claude-opus-4-8' : options.model,
-      modelFamily: options.model === null ? null : 'opus',
+      model,
+      modelFamily: options.modelFamily === undefined ? modelFamilyOf(model) : options.modelFamily,
       timestamp,
       tzOffsetMinutes,
       localDate: stamp.localDate,
@@ -74,7 +78,7 @@ export function fakeRecord(options: FakeEventOptions): IngestRecord {
       sessionId: options.sessionId === undefined ? 'session-1' : options.sessionId,
       externalId: `ext-${options.index}`,
       parentEventId: null,
-      isSubagent: false,
+      isSubagent: options.isSubagent ?? false,
       projectId: options.projectId === undefined ? 'project-1' : options.projectId,
       workingDirectory: '/tmp/project-1',
       repository: null,

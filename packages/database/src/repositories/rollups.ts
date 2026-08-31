@@ -95,6 +95,21 @@ export class RollupRepository {
     this.connection.prepare('DELETE FROM daily_active').run();
   }
 
+  /**
+   * True when the event log holds data the derived tables do not describe, which is what a
+   * migration that invalidates them leaves behind. Every event contributes a rollup row, so
+   * events with no rollups at all can only mean the tables need rebuilding.
+   */
+  needsRebuild(): boolean {
+    const row = this.connection
+      .prepare(
+        `SELECT EXISTS(SELECT 1 FROM events) AS hasEvents,
+                EXISTS(SELECT 1 FROM daily_rollups) AS hasRollups`,
+      )
+      .get() as { hasEvents: number; hasRollups: number };
+    return row.hasEvents === 1 && row.hasRollups === 0;
+  }
+
   coveredDays(): number {
     const row = this.connection.prepare('SELECT COUNT(*) AS n FROM daily_active').get() as {
       n: number;

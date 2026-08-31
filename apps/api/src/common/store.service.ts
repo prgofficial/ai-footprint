@@ -2,6 +2,7 @@ import { Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { getLogger } from '@ai-footprint/config';
 import { createStore, type Store } from '@ai-footprint/database';
 import {
+  ACTIVE_TIME_TAIL_ALLOWANCE_MS,
   CLASSIFIER_VERSION,
   DEFAULT_IDLE_TIMEOUT_MS,
   ENRICHMENT_VERSION,
@@ -37,6 +38,18 @@ export class StoreService implements OnModuleDestroy {
     }
     this.store.settings.setMeta('classifierVersion', String(CLASSIFIER_VERSION));
     this.store.settings.setMeta('enrichmentVersion', String(ENRICHMENT_VERSION));
+
+    // A migration that changes what the rollups summarise empties them rather than trying to
+    // re-aggregate in SQL. Rebuilding before the first request is served costs a second or two
+    // once, where serving zeroes would look like data loss. Measured at 1.5s over 323k events.
+    if (this.store.rollups.needsRebuild()) {
+      const startedAt = Date.now();
+      const days = this.store.rollups.rebuildAll(
+        this.settings().idleTimeoutMinutes * 60_000,
+        ACTIVE_TIME_TAIL_ALLOWANCE_MS,
+      );
+      getLogger().info({ days, ms: Date.now() - startedAt }, 'analytics rollups rebuilt');
+    }
   }
 
   settings(): SettingsResponse {

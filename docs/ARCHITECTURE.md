@@ -94,6 +94,27 @@ row already exists, updates only the columns a later sighting can legitimately i
 A full re-scan, a hook retry, a crash mid-backfill and a stack redeploy are therefore all
 safe: 10,000 events ingested twice produce exactly 10,000 rows, which is asserted by a test.
 
+## Which model answered
+
+A transcript stamps the model on the reply, never on the prompt the reply answers. Left
+alone, every prompt would carry a null model, no prompt would be countable against a model,
+and the model filter would empty half of every screen.
+
+A prompt is therefore attributed to the model that answered it: the first reply after it in
+the same session, on the same side of a subagent boundary, skipping the `<synthetic>`
+placeholder Claude Code writes for its own generated messages. A prompt that was never
+answered keeps its null rather than borrowing a model from further down the file.
+
+This runs after every ingest rather than while records are being mapped, because in the
+realtime path the prompt is on disk and read seconds before the reply exists — and by then
+the dedupe key above stops a re-scan from ever correcting the row. A partial index holding
+only unlinked prompts keeps the pass at single-digit milliseconds; it is nearly empty in a
+settled database. Existing history was corrected by `0003_prompt_model`.
+
+Sessions are the one figure a model filter cannot take from the rollups: a session row has
+no model, and the rollups count a session once per dimension it appears in. That query falls
+back to the event log, the same way filtered active time does.
+
 ## Data model
 
 Fifteen tables. The ones that carry the design:
