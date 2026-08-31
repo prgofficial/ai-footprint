@@ -11,6 +11,7 @@ import {
   fingerprint,
   preview,
   redact,
+  redactDeep,
   sha256,
   wordCount,
 } from '@ai-footprint/analytics';
@@ -79,7 +80,7 @@ export function normalize(
       durationMs: input.durationMs ?? null,
       sourceVersion: input.sourceVersion ?? null,
       ingestVersion: INGEST_VERSION,
-      metadataJson: input.metadata ? JSON.stringify(input.metadata) : null,
+      metadataJson: serializeMetadata(input.metadata, options.redactSecrets),
     },
   };
 
@@ -127,6 +128,16 @@ export function normalize(
  * What distinguishes two events from a source with no stable id. Byte-identical submissions
  * still collapse; two different events in the same millisecond stay two.
  */
+/** Metadata reaches the disk, so it gets the same redaction pass as everything else. */
+function serializeMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  redactSecrets: boolean,
+): string | null {
+  if (!metadata) return null;
+  const value = redactSecrets ? redactDeep(metadata).value : metadata;
+  return JSON.stringify(value);
+}
+
 function contentIdentity(input: AIEventInput & { providerId: string }): string {
   return sha256(
     JSON.stringify([

@@ -42,17 +42,57 @@ const RULES: Rule[] = [
   { kind: 'basic_auth', pattern: /\bBasic\s+([A-Za-z0-9+/=]{16,})/g, group: 1 },
   {
     kind: 'assigned_secret',
+    // The key may be quoted (`"apiKey": "..."`), hyphenated (`x-api-key: ...`) or plain
+    // (`OPENAI_API_KEY=...`), because a config blob and a header dump are two of the most
+    // common things anyone pastes into a prompt. Matching only the bare-uppercase form left
+    // every JSON credential in the database in plaintext, counted as nothing redacted.
     pattern:
-      /\b([A-Z0-9_]*(?:API_KEY|APIKEY|SECRET|SECRET_KEY|ACCESS_TOKEN|AUTH_TOKEN|PASSWORD|PASSWD|PRIVATE_KEY|CLIENT_SECRET)[A-Z0-9_]*)\s*[=:]\s*["']?([^\s"'`,;]{8,})["']?/gi,
+      /["'`]?\b([A-Za-z0-9_-]*(?:API[_-]?KEY|SECRET|SECRET[_-]?KEY|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN|PASSWORD|PASSWD|PRIVATE[_-]?KEY|CLIENT[_-]?SECRET|CREDENTIAL|SESSION[_-]?TOKEN)[A-Za-z0-9_-]*)\b["'`]?\s*[=:]\s*["'`]?([^\s"'`,;}\]]{8,})["'`]?/gi,
     group: 2,
   },
 ];
 
 const PLACEHOLDER_LIKE =
-  /^(?:x{3,}|\*{3,}|<[^>]+>|\$\{[^}]+\}|your[_-]?\w*|changeme|example|placeholder|redacted|null|undefined|true|false)$/i;
+  // `\$\{...\}?` allows the closing brace to be absent: a value stops at `}` so that a JSON
+  // object does not swallow the rest of the blob, which clips `${GITHUB_TOKEN}` on the way in.
+  /^(?:x{3,}|\*{3,}|<[^>]+>|\$\{[^}]*\}?|%[A-Z_]+%|your[_-]?\w*|changeme|example|placeholder|redacted|null|undefined|true|false)$/i;
 
 function looksLikePlaceholder(value: string): boolean {
-  return PLACEHOLDER_LIKE.test(value.trim());
+  const trimmed = value.trim();
+  // A later rule must not redact what an earlier rule already replaced, or the placeholder
+  // itself is treated as the secret and the output is mangled.
+  if (trimmed.startsWith('[redacted:')) return true;
+  return PLACEHOLDER_LIKE.test(trimmed);
+}
+
+/**
+ * Redacts every string in an arbitrary structure. `metadata` is where an adapter puts extra
+ * context (editor selection, headers, an env snapshot), so it is where credentials arrive.
+ */
+export function redactDeep(value: unknown): { value: unknown; count: number; kinds: string[] } {
+  const kinds = new Set<string>();
+  let count = 0;
+
+  const walk = (node: unknown, depth: number): unknown => {
+    if (depth > 12) return node;
+    if (typeof node === 'string') {
+      const result = redact(node);
+      count += result.count;
+      for (const kind of result.kinds) kinds.add(kind);
+      return result.text;
+    }
+    if (Array.isArray(node)) return node.map((item) => walk(item, depth + 1));
+    if (node && typeof node === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(node as Record<string, unknown>)) {
+        out[key] = walk(item, depth + 1);
+      }
+      return out;
+    }
+    return node;
+  };
+
+  return { value: walk(value, 0), count, kinds: [...kinds] };
 }
 
 export function redact(input: string | null | undefined): RedactionResult {

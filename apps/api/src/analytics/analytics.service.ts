@@ -336,11 +336,24 @@ export class AnalyticsService {
   projects(query: RangeQuery): ProjectUsage[] {
     const store = this.stores.store;
     const { filters } = this.scope(query);
+    const scope = this.scope(query);
     const rows = store.analytics.projectDetails(filters, 100);
     const ids = rows.map((row) => row.projectId);
-    const categories = store.analytics.topPerProject(ids, 'category');
-    const technologies = store.analytics.topPerProject(ids, 'technology');
-    const models = store.analytics.topPerProject(ids, 'model');
+    const categories = store.analytics.topPerProject(ids, 'category', filters);
+    const technologies = store.analytics.topPerProject(ids, 'technology', filters);
+    const models = store.analytics.topPerProject(ids, 'model', filters);
+    // Active time for the selected window and the selected tool, computed the same way the
+    // Overview computes it, rather than read from the project's all-time session totals.
+    const activeByProject = new Map(
+      ids.map((projectId) => [
+        projectId,
+        store.analytics.activeMs(
+          { ...filters, projectId },
+          scope.idleTimeoutMs,
+          ACTIVE_TIME_TAIL_ALLOWANCE_MS,
+        ),
+      ]),
+    );
 
     return rows.map((row) => ({
       projectId: row.projectId,
@@ -349,7 +362,7 @@ export class AnalyticsService {
       repository: row.repository,
       prompts: row.prompts,
       sessions: row.sessions,
-      activeMs: row.activeMs,
+      activeMs: activeByProject.get(row.projectId) ?? 0,
       lastActivityAt: row.lastActivityAt,
       topCategories: (categories.get(row.projectId) ?? []).map((entry) => ({
         category: entry.key as PromptCategory,
@@ -534,8 +547,7 @@ export class AnalyticsService {
 
   sessionDetail(id: string): SessionDetail {
     const store = this.stores.store;
-    const page = store.analytics.sessions({}, { limit: 1000 });
-    const summary = page.items.find((row) => row.id === id);
+    const summary = store.analytics.sessionById(id);
     if (!summary) throw new NotFound('That session');
 
     const categories = store.analytics.sessionCategories([id]);
@@ -595,7 +607,8 @@ export class AnalyticsService {
       averageSessionMs: totals.sessions > 0 ? Math.round(totals.activeMs / totals.sessions) : 0,
       totalPrompts: totals.prompts,
       totalSessions: totals.sessions,
-      firstActivityAt: store.events.firstEventAt(),
+      // Within the selected range and provider, like every other figure on this page.
+      firstActivityAt: store.analytics.firstEventAt(filters),
       hasEnoughData: totals.prompts >= 10,
     };
   }

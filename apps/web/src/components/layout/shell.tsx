@@ -1,9 +1,9 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Circle, Moon, Sun } from 'lucide-react';
+import { Circle, Footprints, Moon, Sun } from 'lucide-react';
 import { useHealth, useSystemConfig } from '@/lib/queries';
 import { cn } from '@/lib/utils';
-import { VENDOR_NAME, VENDOR_URL } from '@ai-footprint/shared';
+import { APP_NAME, VENDOR_NAME, VENDOR_SHORT, VENDOR_URL } from '@ai-footprint/shared';
 import { Button } from '../ui/primitives';
 
 const NAV = [
@@ -43,10 +43,25 @@ function useTheme(): [Theme, (theme: Theme) => void] {
   return [theme, setTheme];
 }
 
+/**
+ * A mark, not a line of text: the glyph carries the product and the byline sits under the name
+ * where a maker's mark belongs, rather than competing with the navigation beside it.
+ */
 function Wordmark() {
   return (
-    <span className="flex items-baseline gap-1.5">
-      <span className="text-sm font-semibold tracking-tight text-ink">AI Footprint</span>
+    <span className="flex items-center gap-2.5">
+      <span
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/12 text-accent ring-1 ring-accent/25"
+        aria-hidden="true"
+      >
+        <Footprints className="size-4" />
+      </span>
+      <span className="flex flex-col leading-none">
+        <span className="text-sm font-semibold tracking-tight text-ink">{APP_NAME}</span>
+        <span className="mt-1 text-[0.625rem] leading-none font-medium tracking-[0.08em] text-subtle uppercase">
+          by {VENDOR_SHORT}
+        </span>
+      </span>
     </span>
   );
 }
@@ -73,15 +88,22 @@ export function AppShell() {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center gap-6 px-5 sm:px-8">
-          <NavLink to="/" className="shrink-0 rounded-sm" aria-label="AI Footprint home">
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-5 px-5 sm:px-8">
+          <NavLink
+            to="/"
+            className="shrink-0 rounded-lg transition-opacity hover:opacity-85"
+            aria-label={`${APP_NAME} home`}
+          >
             <Wordmark />
           </NavLink>
 
+          <span className="hidden h-7 w-px shrink-0 bg-line md:block" aria-hidden="true" />
+
+          {/* One inset rail so the sections read as a set, and the active one as a raised card. */}
           <nav
             aria-label="Primary"
-            className="-mx-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+            className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg bg-sunken/60 p-1"
           >
             {NAV.map((item) => (
               <NavLink
@@ -90,8 +112,10 @@ export function AppShell() {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
-                    isActive ? 'bg-sunken text-ink' : 'text-subtle hover:text-ink',
+                    'rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-all',
+                    isActive
+                      ? 'bg-raised text-ink shadow-card ring-1 ring-line'
+                      : 'text-subtle hover:bg-raised/60 hover:text-ink',
                   )
                 }
               >
@@ -102,14 +126,26 @@ export function AppShell() {
 
           <div className="flex shrink-0 items-center gap-2">
             {offline ? (
-              <span className="flex items-center gap-1.5 text-2xs text-negative" role="status">
+              <span
+                className="flex items-center gap-1.5 rounded-full bg-negative/10 px-2 py-1 text-2xs font-medium text-negative"
+                role="status"
+              >
                 <Circle className="size-2 fill-current" aria-hidden="true" />
                 Disconnected
               </span>
-            ) : null}
+            ) : (
+              <span
+                className="hidden items-center gap-1.5 rounded-full bg-positive/10 px-2 py-1 text-2xs font-medium text-positive lg:flex"
+                role="status"
+              >
+                <Circle className="size-2 fill-current" aria-hidden="true" />
+                Local
+              </span>
+            )}
             <Button
               size="sm"
               variant="ghost"
+              className="size-8 rounded-lg border border-line px-0 hover:bg-sunken"
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >

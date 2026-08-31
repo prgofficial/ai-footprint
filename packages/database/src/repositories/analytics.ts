@@ -378,13 +378,20 @@ export class AnalyticsRepository {
   ): { items: SessionRow[]; nextCursor: string | null } {
     const clauses: string[] = [];
     const params: unknown[] = [];
-    if (filters.from) {
-      clauses.push('s.started_at >= ?');
-      params.push(filters.from);
-    }
-    if (filters.to) {
-      clauses.push('s.started_at <= ?');
-      params.push(filters.to);
+    // A session that began before the window but did its work inside it is counted by every
+    // other view; filtering on started_at alone made the list disagree with the KPI above it
+    // and hid any session a tool keeps open across midnight.
+    if (filters.from || filters.fromDay || filters.to || filters.toDay) {
+      const from = filters.from ?? (filters.fromDay ? `${filters.fromDay}T00:00:00.000Z` : null);
+      const to = filters.to ?? (filters.toDay ? `${filters.toDay}T23:59:59.999Z` : null);
+      if (to) {
+        clauses.push('s.started_at <= ?');
+        params.push(to);
+      }
+      if (from) {
+        clauses.push('COALESCE(s.ended_at, s.started_at) >= ?');
+        params.push(from);
+      }
     }
     if (filters.providerId) {
       clauses.push('s.provider_id = ?');
@@ -395,7 +402,9 @@ export class AnalyticsRepository {
       params.push(filters.projectId);
     }
     if (filters.model) {
-      clauses.push('s.primary_model = ?');
+      // primary_model is a single mode over the session, so a session that switched model
+      // mid-thread (routine outside Claude Code) was counted by the KPI and missing here.
+      clauses.push('EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.model = ?)');
       params.push(filters.model);
     }
 
@@ -426,6 +435,22 @@ export class AnalyticsRepository {
         ? encodeCursor({ timestamp: last.startedAt, id: last.id })
         : null;
     return { items, nextCursor };
+  }
+
+  /** Direct lookup: scanning the newest 1000 sessions 404s every older one. */
+  sessionById(id: string): SessionRow | undefined {
+    return this.connection
+      .prepare(
+        `SELECT s.id, s.provider_id AS providerId, s.external_id AS externalId,
+                s.project_id AS projectId, pj.name AS projectName, s.primary_model AS primaryModel,
+                s.started_at AS startedAt, s.ended_at AS endedAt, s.duration_ms AS durationMs,
+                s.active_ms AS activeMs, s.prompt_count AS promptCount, s.tool_count AS toolCount,
+                s.input_tokens AS inputTokens, s.output_tokens AS outputTokens,
+                s.estimated_cost_usd AS estimatedCostUsd
+         FROM sessions s LEFT JOIN projects pj ON pj.id = s.project_id
+         WHERE s.id = ?`,
+      )
+      .get(id) as SessionRow | undefined;
   }
 
   sessionCategories(sessionIds: string[]): Map<string, Array<{ category: string; count: number }>> {
@@ -482,7 +507,11 @@ export class AnalyticsRepository {
                 SUM(CASE WHEN e.event_type = 'prompt' THEN 1 ELSE 0 END) AS prompts,
                 COUNT(DISTINCT e.session_id) AS sessions,
                 MAX(e.timestamp) AS lastActivityAt,
-                COALESCE((SELECT SUM(s.active_ms) FROM sessions s WHERE s.project_id = pj.id), 0) AS activeMs
+                -- Computed from the same filtered window as every other column. Reading stored
+                -- session totals instead reported the all-time, all-provider figure beside a
+                -- filtered prompt count, so picking either of two tools sharing a directory
+                -- showed the same combined number.
+                0 AS activeMs
          FROM events e JOIN projects pj ON pj.id = e.project_id
          WHERE ${where.sql}
          GROUP BY pj.id ORDER BY prompts DESC LIMIT ?`,
@@ -490,27 +519,33 @@ export class AnalyticsRepository {
       .all(...where.params, limit) as ProjectAggregateRow[];
   }
 
+  /** The top N within the SAME window the caller asked about, not across all history. */
   topPerProject(
     projectIds: string[],
     dimension: 'category' | 'technology' | 'model',
+    filters: EventFilters = {},
   ): Map<string, Array<{ key: string; count: number }>> {
     const out = new Map<string, Array<{ key: string; count: number }>>();
     if (projectIds.length === 0) return out;
     const placeholders = projectIds.map(() => '?').join(',');
+    const scope = buildEventWhere(filters);
     const query =
       dimension === 'category'
         ? `SELECT e.project_id AS projectId, c.category AS key, COUNT(*) AS count
            FROM events e JOIN classifications c ON c.event_id = e.id
-           WHERE e.project_id IN (${placeholders}) GROUP BY e.project_id, key ORDER BY count DESC`
+           WHERE e.project_id IN (${placeholders}) AND ${scope.sql}
+           GROUP BY e.project_id, key ORDER BY count DESC`
         : dimension === 'technology'
           ? `SELECT e.project_id AS projectId, t.technology AS key, COUNT(*) AS count
              FROM events e JOIN technologies t ON t.event_id = e.id
-             WHERE e.project_id IN (${placeholders}) GROUP BY e.project_id, key ORDER BY count DESC`
+             WHERE e.project_id IN (${placeholders}) AND ${scope.sql}
+             GROUP BY e.project_id, key ORDER BY count DESC`
           : `SELECT e.project_id AS projectId, e.model AS key, COUNT(*) AS count
              FROM events e WHERE e.project_id IN (${placeholders}) AND e.model IS NOT NULL
+               AND ${scope.sql}
              GROUP BY e.project_id, key ORDER BY count DESC`;
 
-    const rows = this.connection.prepare(query).all(...projectIds) as Array<{
+    const rows = this.connection.prepare(query).all(...projectIds, ...scope.params) as Array<{
       projectId: string;
       key: string;
       count: number;
@@ -521,6 +556,15 @@ export class AnalyticsRepository {
       out.set(row.projectId, list);
     }
     return out;
+  }
+
+  /** Earliest event inside the given slice, so the Profile page answers about that slice. */
+  firstEventAt(filters: EventFilters): string | null {
+    const where = buildEventWhere(filters);
+    const row = this.connection
+      .prepare(`SELECT MIN(e.timestamp) AS at FROM events e WHERE ${where.sql}`)
+      .get(...where.params) as { at: string | null };
+    return row.at;
   }
 
   maxEventId(): string {

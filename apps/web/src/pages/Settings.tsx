@@ -14,12 +14,7 @@ import {
   useUpdateSettings,
 } from '@/lib/queries';
 import { formatBytes, formatExact, formatRelative } from '@/lib/utils';
-import {
-  APP_NAME,
-  VENDOR_NAME,
-  VENDOR_URL,
-  type SettingsResponse,
-} from '@ai-footprint/shared';
+import { APP_NAME, VENDOR_NAME, VENDOR_URL, type SettingsResponse } from '@ai-footprint/shared';
 
 function Toggle({
   label,
@@ -53,11 +48,19 @@ function Toggle({
 }
 
 const DELETE_SCOPES = [
-  { value: 'prompts', label: 'Prompt text only', hint: 'Keeps every analytic. Removes the words.' },
-  { value: 'all', label: 'Everything', hint: 'Every event, session, project and prompt.' },
+  {
+    value: 'prompts',
+    label: "Prompt text in AI Footprint's database",
+    hint: 'Keeps every chart and metric. Removes only the stored words.',
+  },
+  {
+    value: 'all',
+    label: "Everything in AI Footprint's database",
+    hint: 'Every event, session, project and prompt this app has collected.',
+  },
 ] as const;
 
-function DangerZone() {
+function DangerZone({ dataDirectory }: { dataDirectory?: string | null }) {
   const [scope, setScope] = useState<'prompts' | 'all'>('prompts');
   const [confirm, setConfirm] = useState('');
   const preview = useDeletePreview();
@@ -68,10 +71,24 @@ function DangerZone() {
   return (
     <Card className="border-negative/25">
       <CardHeader
-        title="Delete data"
+        title="Delete AI Footprint's data"
         description="This cannot be undone. Export first if you want a copy."
       />
       <div className="px-5 pb-5">
+        <p className="mb-4 rounded-md border border-line bg-sunken px-3 py-2.5 text-2xs leading-relaxed text-muted">
+          <ShieldCheck
+            className="mr-1.5 inline size-3 align-[-2px] text-positive"
+            aria-hidden="true"
+          />
+          This only clears{' '}
+          <strong className="font-medium text-ink">AI Footprint&rsquo;s own database</strong> at{' '}
+          <Mono className="text-ink">{dataDirectory ?? 'your data directory'}</Mono>. Your AI tools
+          and everything they store — Claude Code&rsquo;s transcripts in{' '}
+          <Mono className="text-ink">~/.claude</Mono>, your chat history, your code — are never
+          touched. AI Footprint only ever reads them. Deleting here means the charts start again
+          from scratch; re-connecting a tool re-reads its history.
+        </p>
+
         <div className="flex flex-wrap gap-2">
           {DELETE_SCOPES.map((option) => (
             <button
@@ -428,7 +445,9 @@ export function SettingsPage() {
           </Card>
 
           <Section className="lg:col-span-2">
-            <DangerZone />
+            <DangerZone
+              dataDirectory={config.data?.hostDataDirectory ?? config.data?.dataDirectory}
+            />
           </Section>
         </div>
       )}
