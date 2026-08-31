@@ -109,9 +109,12 @@ export class SessionRepository {
     const setDerived = this.connection.prepare(`
       UPDATE sessions
       SET active_ms = ?,
-          duration_ms = CAST(
+          -- COALESCE because julianday() returns NULL for a timestamp it cannot parse, and the
+          -- column is NOT NULL: without it one unrepresentable row aborted the transaction and
+          -- took every other session's metrics, the rollups and the ingest log down with it.
+          duration_ms = COALESCE(CAST(
             MAX((julianday(COALESCE(ended_at, started_at)) - julianday(started_at)) * 86400000, 0)
-            AS INTEGER)
+            AS INTEGER), 0)
       WHERE id = ?`);
 
     const eventCount = this.connection.prepare(

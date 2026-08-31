@@ -60,7 +60,7 @@ So collection is three tiers, transcript-first:
 | --- | --- | --- |
 | **A — transcripts** (primary) | `~/.claude/projects/**/*.jsonl` | Prompts, responses, model, full usage including cache reads and writes, tool calls, subagents, working directory, git branch, compaction, errors — and the entire history from the first second |
 | **B — hooks** (optional) | `~/.claude/settings.json` | A sub-second "something happened" nudge and session lifecycle. No usage data. |
-| **C — OTLP** (optional) | `CLAUDE_CODE_ENABLE_TELEMETRY=1` | Vendor-official cost and active time |
+| **C — OTLP** | *Not built.* It was planned and is not shipped; nothing in the product listens for OTLP. Cost is estimated from token counts instead (see below). |
 
 Tier A needs no change to the user's Claude Code configuration at all.
 

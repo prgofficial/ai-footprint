@@ -127,13 +127,28 @@ export class IngestService {
         model: string | null;
       }
     >();
-    const defaultOffset = offsetMinutesFor(settings.timezone);
+    // Resolved per event, at the event's own instant. Resolving it once for "now" stamped a
+    // January event ingested in August with the summer offset, so a tool backfilling history
+    // across a daylight-saving change got the wrong local date for half of it.
+    const offsetCache = new Map<string, number>();
+    const offsetAt = (timestamp: string): number => {
+      const day = timestamp.slice(0, 10);
+      const cached = offsetCache.get(day);
+      if (cached !== undefined) return cached;
+      const parsed = new Date(timestamp);
+      const offset = offsetMinutesFor(
+        settings.timezone,
+        Number.isNaN(parsed.getTime()) ? new Date() : parsed,
+      );
+      offsetCache.set(day, offset);
+      return offset;
+    };
 
     const normalizeOptions: NormalizeOptions = {
       redactSecrets: settings.redactSecrets,
       metadataOnly: settings.metadataOnly,
       storeResponses: settings.storeResponses,
-      defaultTzOffsetMinutes: defaultOffset,
+      defaultTzOffsetMinutes: 0,
       projectIdFor: (cwd) => resolver.resolve(cwd)?.id ?? null,
       sessionIdFor: (providerId, externalSessionId) =>
         externalSessionId ? sessionRowId(providerId, externalSessionId) : null,
@@ -160,7 +175,7 @@ export class IngestService {
         // collapse every tool into one.
         record = normalize(
           { ...parsed.data, providerId: parsed.data.providerId ?? options.providerId },
-          normalizeOptions,
+          { ...normalizeOptions, defaultTzOffsetMinutes: offsetAt(parsed.data.timestamp) },
         );
       } catch {
         failed += 1;

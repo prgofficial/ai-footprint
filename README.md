@@ -30,6 +30,7 @@ That is the whole setup. No `.env`, no ports to pick, no database to create.
 - [Windows](#windows)
 - [Docker Swarm](#docker-swarm)
 - [Without Docker](#without-docker)
+- [Connecting another AI tool](#connecting-another-ai-tool)
 - [Supported integrations](#supported-integrations)
 - [Where your data lives](#where-your-data-lives)
 - [Architecture](#architecture)
@@ -237,6 +238,15 @@ packages/database Drizzle schema, migrations, repositories
 packages/analytics classification, technology detection, redaction, pricing
 packages/collectors provider interface and the Claude Code adapter
 ```
+
+## Connecting another AI tool
+
+Claude Code is read automatically. Any other tool — Cursor, Copilot, Gemini CLI, Codex, or one
+you write — sends its own events to `POST /api/ingest/events` and appears on every screen like
+any other source. No adapter to write, nothing to register in advance.
+
+See **[docs/INTEGRATING.md](docs/INTEGRATING.md)** for the contract, the token, and a one-liner
+to check your wiring.
 
 ## Contributing
 

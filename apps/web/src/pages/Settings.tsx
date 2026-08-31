@@ -51,11 +51,13 @@ const DELETE_SCOPES = [
   {
     value: 'prompts',
     label: "Prompt text in AI Footprint's database",
+    action: 'Delete prompt text',
     hint: 'Keeps every chart and metric. Removes only the stored words.',
   },
   {
     value: 'all',
     label: "Everything in AI Footprint's database",
+    action: 'Delete everything',
     hint: 'Every event, session, project and prompt this app has collected.',
   },
 ] as const;
@@ -157,7 +159,7 @@ function DangerZone({ dataDirectory }: { dataDirectory?: string | null }) {
               ) : (
                 <Trash2 className="size-3" aria-hidden="true" />
               )}
-              Delete {selected?.label.toLowerCase()}
+              {selected?.action}
             </Button>
           </div>
         ) : null}

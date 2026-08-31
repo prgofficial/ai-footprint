@@ -52,7 +52,6 @@ export class SystemController {
       timezone: settings.timezone,
       onboardingComplete: settings.onboardingComplete,
       capabilities: {
-        otlp: settings.otlpEnabled,
         hooks: true,
         export: true,
       },

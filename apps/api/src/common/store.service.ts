@@ -17,7 +17,6 @@ export const SETTING_DEFAULTS: SettingsResponse = {
   timezone: '',
   idleTimeoutMinutes: DEFAULT_IDLE_TIMEOUT_MS / 60_000,
   scanManifests: false,
-  otlpEnabled: false,
   retentionMonths: 0,
   onboardingComplete: false,
 };

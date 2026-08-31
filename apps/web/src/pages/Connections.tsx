@@ -10,6 +10,7 @@ import {
   useProviders,
   useSetProviderEnabled,
   useStartBackfill,
+  useSystemConfig,
 } from '@/lib/queries';
 import { formatBytes, formatExact, formatRelative } from '@/lib/utils';
 import type { ProviderSummary } from '@ai-footprint/shared';
@@ -228,6 +229,7 @@ function ProviderCard({ provider }: { provider: ProviderSummary }) {
 
 export function ConnectionsPage() {
   const providers = useProviders(5000);
+  const config = useSystemConfig();
 
   return (
     <>
@@ -251,9 +253,21 @@ export function ConnectionsPage() {
           <Card className="border-dashed">
             <div className="px-5 py-6 text-center">
               <p className="text-xs font-medium text-ink">Connect another tool</p>
-              <p className="mx-auto mt-1 max-w-md text-2xs text-subtle">
-                Cursor, Copilot, Gemini and Codex adapters slot into the same provider interface.
-                They are not built yet.
+              <p className="mx-auto mt-1 max-w-md text-2xs leading-relaxed text-subtle">
+                Claude Code is the only tool AI Footprint reads by itself. Anything else — Cursor,
+                Copilot, Gemini, Codex, or something you write — can send its own events to{' '}
+                <Mono className="text-ink">POST /api/ingest/events</Mono>, and it will appear here
+                and on every chart like any other source.
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-2xs text-subtle">
+                The token is in{' '}
+                <Mono className="text-ink">
+                  {config.data?.hostDataDirectory ??
+                    config.data?.dataDirectory ??
+                    '~/.ai-footprint'}
+                  /config/runtime.json
+                </Mono>
+                . See <span className="text-ink">docs/INTEGRATING.md</span>.
               </p>
             </div>
           </Card>

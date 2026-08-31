@@ -187,6 +187,10 @@ export class EventRepository {
     return [...days.values()];
   }
 
+  exists(id: string): boolean {
+    return this.connection.prepare('SELECT 1 FROM events WHERE id = ?').get(id) !== undefined;
+  }
+
   countAll(): number {
     const row = this.connection.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number };
     return row.n;

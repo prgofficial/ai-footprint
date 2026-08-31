@@ -236,7 +236,22 @@ const CONTEXT_TERMS: Array<[TaskContext, string[]]> = [
     'Frontend',
     ['ui', 'component', 'page', 'styling', 'layout', 'responsive', 'accessibility', 'browser'],
   ],
-  ['Smart Contract', ['contract', 'on chain', 'gas', 'wallet', 'token', 'audit']],
+  // "token", "gas" and "audit" are everyday web vocabulary (auth tokens, CSRF tokens,
+  // tokenizers), and on their own they used to badge a prompt Smart Contract at 100%
+  // confidence. Only unambiguous phrases here; the ambiguous ones are gated below.
+  [
+    'Smart Contract',
+    [
+      'on chain',
+      'onchain',
+      'erc20',
+      'erc721',
+      'gas limit',
+      'gas optimization',
+      'smart contract',
+      'token contract',
+    ],
+  ],
   [
     'Infrastructure',
     ['deploy', 'pipeline', 'infrastructure', 'server config', 'scaling', 'monitoring'],
@@ -253,6 +268,20 @@ export interface DetectionInput {
   projectTechnologies?: string[];
 }
 
+/**
+ * Extensions in the raw text, before normalisation discards whole paths. Cursor's
+ * `@src/hooks/useAuth.ts`, Copilot's `#file:` and Aider's file arguments all carry a slashed
+ * path, and none of them detected anything.
+ */
+function extensionsIn(text: string): string[] {
+  const found = new Set<string>();
+  for (const match of text.matchAll(/[\w./\\@-]*\.([A-Za-z0-9]{1,8})\b/g)) {
+    const extension = match[1]?.toLowerCase();
+    if (extension) found.add(extension);
+  }
+  return [...found];
+}
+
 export function detectTechnologies(input: DetectionInput): TechnologyMatch[] {
   const normalized = ` ${normalizeForFingerprint(input.text)} `;
   const found = new Map<string, number>();
@@ -266,7 +295,7 @@ export function detectTechnologies(input: DetectionInput): TechnologyMatch[] {
     }
   }
 
-  for (const extension of input.fileExtensions ?? []) {
+  for (const extension of [...(input.fileExtensions ?? []), ...extensionsIn(input.text)]) {
     const entry = BY_EXTENSION.get(extension.toLowerCase());
     if (entry) found.set(entry.name, Math.max(found.get(entry.name) ?? 0, 0.7));
   }

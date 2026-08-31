@@ -69,7 +69,10 @@ export class EnrichmentRepository {
                    JOIN events te ON te.id = tc.event_id
                   WHERE te.session_id = e.session_id
                     AND te.timestamp > e.timestamp
-                    AND te.timestamp <= datetime(e.timestamp, '+5 minutes')
+                    -- strftime, not datetime: events.timestamp is a full ISO string and
+                    -- datetime() returns 'YYYY-MM-DD HH:MM:SS', so the comparison was false
+                    -- for every row and the strongest classifier signal never fired at all.
+                    AND te.timestamp <= strftime('%Y-%m-%dT%H:%M:%fZ', e.timestamp, '+5 minutes')
                 ) AS toolNames
            FROM events e
            LEFT JOIN prompts p ON p.event_id = e.id

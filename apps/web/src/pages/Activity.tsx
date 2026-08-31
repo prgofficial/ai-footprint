@@ -57,6 +57,9 @@ function Row({ item }: { item: ActivityItem }) {
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs text-subtle">
           <span>{formatDateTime(item.timestamp)}</span>
+          {/* Which tool produced this. The API has always sent it; with more than one source
+              connected, a feed that does not say is unreadable. */}
+          <span className="truncate text-muted">{item.providerName}</span>
           {item.projectName ? <span className="truncate">{item.projectName}</span> : null}
           {item.model ? <span className="font-mono">{item.model}</span> : null}
           {item.isSubagent ? <Badge tone="muted">subagent</Badge> : null}

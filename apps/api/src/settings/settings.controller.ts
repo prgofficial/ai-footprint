@@ -6,7 +6,7 @@ import {
   type SettingsResponse,
   type TaskContext,
 } from '@ai-footprint/shared';
-import { LocalOriginGuard, StoreService, zodPipe } from '../common';
+import { LocalOriginGuard, NotFound, StoreService, zodPipe } from '../common';
 
 @Controller('api')
 @UseGuards(LocalOriginGuard)
@@ -32,6 +32,8 @@ export class SettingsController {
   @Post('events/:id/classify')
   classify(@Param('id') id: string, @Body(zodPipe(classifyOverrideSchema)) body: unknown) {
     const payload = body as { category: string; contexts?: TaskContext[] };
+    // Without this the insert trips a foreign key and answers 500 with the raw SQL message.
+    if (!this.stores.store.events.exists(id)) throw new NotFound('That event');
     this.stores.store.enrichment.override(
       id,
       payload.category,

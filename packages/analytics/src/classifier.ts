@@ -391,11 +391,15 @@ const TOOL_SIGNALS: Array<
   ['Testing', (_tools, counts) => ((counts.get('Bash') ?? 0) > 0 ? 0 : 0)],
 ];
 
+/**
+ * Whole words only. Without the right-hand boundary every term matched as a prefix: "diff"
+ * fired on "different" and "differ", and one weight-5 hit is emitted at 0.88 confidence.
+ */
 function scoreLexicons(normalized: string, scores: Map<PromptCategory, number>): void {
   const padded = ` ${normalized} `;
   for (const lexicon of LEXICONS) {
     for (const term of lexicon.terms) {
-      if (padded.includes(` ${term} `) || padded.includes(` ${term}`)) {
+      if (padded.includes(` ${term.trim()} `)) {
         scores.set(lexicon.category, (scores.get(lexicon.category) ?? 0) + lexicon.weight);
       }
     }

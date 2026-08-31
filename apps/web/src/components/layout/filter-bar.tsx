@@ -20,6 +20,9 @@ function Select({
     <label className="flex items-center gap-1.5">
       <span className="sr-only">{label}</span>
       <select
+        // A value the option list has not loaded yet (or no longer contains) makes the select
+        // fall back to its first option, so a page filtered from a link read "All sources"
+        // while it was filtered. The value is offered explicitly below when that happens.
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || undefined)}
         className={cn(
@@ -29,6 +32,9 @@ function Select({
         )}
       >
         <option value="">{label}</option>
+        {value && !options.some((option) => option.value === value) ? (
+          <option value={value}>{value}</option>
+        ) : null}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

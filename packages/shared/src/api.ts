@@ -33,7 +33,6 @@ export interface SystemConfigResponse {
   timezone: string;
   onboardingComplete: boolean;
   capabilities: {
-    otlp: boolean;
     hooks: boolean;
     export: boolean;
   };
@@ -350,7 +349,6 @@ export interface SettingsResponse {
   timezone: string;
   idleTimeoutMinutes: number;
   scanManifests: boolean;
-  otlpEnabled: boolean;
   retentionMonths: number;
   onboardingComplete: boolean;
 }

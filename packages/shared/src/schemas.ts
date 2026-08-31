@@ -1,10 +1,41 @@
 import { z } from 'zod';
 import { EVENT_TYPES, PROMPT_CATEGORIES, RANGE_PRESETS, TASK_CONTEXTS } from './enums';
 
+/**
+ * A year outside 0001-9999 serialises as `+057615-06-05T...`, which is what a tool that
+ * mistakes microseconds for milliseconds emits. julianday() returns NULL for it and aborts the
+ * ingest transaction, so reject it here and report the row in `failed`.
+ */
+/** An unparseable zone was accepted and then computed against the server's own offset. */
+export const ianaTimeZone = z
+  .string()
+  .max(64)
+  .refine(
+    (value) => {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: value });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Not a time zone this system recognises' },
+  );
+
 export const isoTimestamp = z
   .string()
   .min(4)
-  .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'Not a valid ISO-8601 timestamp' });
+  .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'Not a valid ISO-8601 timestamp' })
+  .refine(
+    (v) => {
+      const parsed = new Date(v);
+      // Unparseable is already rejected above; toISOString() would throw here instead of
+      // failing validation, which is a 500 rather than a 400.
+      if (Number.isNaN(parsed.getTime())) return true;
+      return !/^[+-]/.test(parsed.toISOString());
+    },
+    { message: 'Timestamp year is outside the range this application can store' },
+  );
 
 export const aiEventInputSchema = z.object({
   externalId: z.string().max(256).nullish(),
@@ -63,7 +94,7 @@ export const rangeQuerySchema = z
     range: z.enum(RANGE_PRESETS).default('30d'),
     from: isoTimestamp.optional(),
     to: isoTimestamp.optional(),
-    timezone: z.string().max(64).optional(),
+    timezone: ianaTimeZone.optional(),
     providerId: z.string().max(64).optional(),
     projectId: z.string().max(64).optional(),
     model: z.string().max(128).optional(),
@@ -119,10 +150,9 @@ export const settingsPatchSchema = z.object({
   redactSecrets: z.boolean().optional(),
   metadataOnly: z.boolean().optional(),
   storeResponses: z.boolean().optional(),
-  timezone: z.string().max(64).optional(),
+  timezone: ianaTimeZone.optional(),
   idleTimeoutMinutes: z.number().int().min(1).max(120).optional(),
   scanManifests: z.boolean().optional(),
-  otlpEnabled: z.boolean().optional(),
   retentionMonths: z.number().int().min(0).max(120).optional(),
 });
 

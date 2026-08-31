@@ -152,7 +152,9 @@ function DetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
                   </span>
                 ) : null}
               </Field>
-              <Field label="Claude Code">
+              {/* The tool that produced it, not a hard-coded name: every source was labelled
+                  "Claude Code" regardless of where the prompt actually came from. */}
+              <Field label={prompt.providerName}>
                 {prompt.sourceVersion ? <Mono>{prompt.sourceVersion}</Mono> : null}
               </Field>
             </dl>

@@ -373,7 +373,11 @@ function PeriodDashboard({ data, range }: { data: OverviewResponse; range: strin
           delta={period.estimatedCostUsd.changePct === null ? undefined : period.estimatedCostUsd}
           hint="Estimated from token counts and published list prices. It does not reflect a subscription."
           sub="at list API prices"
-          series={timeline.map((point) => point.estimatedCostUsd ?? 0)}
+          // Only the buckets that carry a price. Plotting an unknown cost as 0 drew a floor
+          // the same card's data table shows as ",".
+          series={timeline
+            .filter((point) => point.estimatedCostUsd !== null)
+            .map((point) => point.estimatedCostUsd ?? 0)}
         />
       </div>
 
@@ -403,7 +407,9 @@ function PeriodDashboard({ data, range }: { data: OverviewResponse; range: strin
           value={
             data.sources.length === 1 ? data.sources[0]!.name : formatExact(data.sources.length)
           }
-          sub={data.sources.length === 1 ? 'the only tool used' : 'connected tools'}
+          // "the only tool used" was asserted even when a source filter was narrowing the page
+          // to one, and "connected tools" was claimed for sources that are merely present.
+          sub={data.sources.length === 1 ? 'in this selection' : 'tools in this selection'}
           title={data.sources.map((source) => source.name).join(', ')}
         />
         <Stat

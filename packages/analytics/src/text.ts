@@ -29,8 +29,13 @@ export function normalizeForFingerprint(text: string): string {
     .trim();
 }
 
+/**
+ * A prompt that is only a code block, a path or a URL normalises to nothing, and all of them
+ * then shared one fingerprint. With nothing left to normalise, the exact text is the identity.
+ */
 export function fingerprint(text: string): string {
-  return sha256(normalizeForFingerprint(text));
+  const normalized = normalizeForFingerprint(text);
+  return normalized ? sha256(normalized) : sha256(`exact:${text.trim()}`);
 }
 
 export function wordCount(text: string): number {

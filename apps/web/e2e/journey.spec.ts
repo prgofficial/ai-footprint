@@ -167,12 +167,15 @@ test.describe('with real analytics', () => {
 
   test('deleting requires a preview and a typed confirmation', async ({ page }) => {
     await page.goto('/settings');
+    // The scope must be unmistakable: this clears the app's own database, not the AI tools'.
+    await expect(page.getByText(/only clears/)).toBeVisible();
+    await expect(page.getByText(/are never touched/)).toBeVisible();
     await page.getByRole('button', { name: 'Preview what would be removed' }).click();
     await expect(page.getByText(/prompt texts/)).toBeVisible();
 
     const confirm = page.getByLabel('Type DELETE to confirm');
     await expect(confirm).toBeVisible();
-    const button = page.getByRole('button', { name: /Delete prompt text only/ });
+    const button = page.getByRole('button', { name: /^Delete prompt text$/ });
     await expect(button).toBeDisabled();
 
     await confirm.fill('DELETE');

@@ -19,6 +19,16 @@ interface RunningBackfill {
 
 const AGGREGATE_FLUSH_MS = 20_000;
 
+/** What a tool that posts its own events can do: everything the payload carries, nothing pulled. */
+const PUSH_ONLY_CAPABILITIES: ProviderSummary['capabilities'] = {
+  historicalBackfill: false,
+  realtime: true,
+  tokens: true,
+  cost: true,
+  responses: true,
+  toolActivity: true,
+};
+
 function emptyProgress(providerId: string): BackfillProgress {
   return {
     providerId,
@@ -290,13 +300,39 @@ export class ProviderRegistry implements OnModuleDestroy {
         warnings: health.warnings,
       });
     }
+    // Tools that push through the ingest endpoint have no adapter, so they were absent from
+    // this list entirely: their data appeared on every chart while the source filter could not
+    // select them, Settings listed one provider beside a storage count of seven, and there was
+    // no way to pause them. They are reported for what they are: a push source, with no
+    // detection or health to speak of.
+    for (const record of store.providers.list()) {
+      if (this.adapters.has(record.id)) continue;
+      summaries.push({
+        id: record.id,
+        name: record.name,
+        status: (record.status as ProviderSummary['status']) ?? 'connected',
+        enabled: record.enabled,
+        capabilities: PUSH_ONLY_CAPABILITIES,
+        detected: true,
+        detectionMessage: 'Sends its own events to AI Footprint.',
+        connectedAt: record.connectedAt ?? null,
+        lastEventAt: record.lastEventAt ?? null,
+        eventCount: store.events.countForProvider(record.id),
+        lastError: record.lastError ?? null,
+        health: { status: 'ok' },
+        warnings: [],
+      });
+    }
+
     return summaries;
   }
 
   setEnabled(providerId: string, enabled: boolean): void {
-    this.get(providerId);
+    // Not this.get(): a push source has no adapter, and pausing it must still work.
+    if (!this.stores.store.providers.get(providerId))
+      throw new NotFound(`The provider "${providerId}"`);
     this.stores.store.providers.update(providerId, { enabled });
-    if (!enabled) void this.stopWatch(providerId);
+    if (!enabled && this.adapters.has(providerId)) void this.stopWatch(providerId);
   }
 
   async onModuleDestroy(): Promise<void> {

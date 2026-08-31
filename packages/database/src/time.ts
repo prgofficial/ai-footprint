@@ -46,8 +46,35 @@ export function offsetMinutesFor(timeZone: string, at: Date = new Date()): numbe
     );
     return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60_000);
   } catch {
-    return -at.getTimezoneOffset();
+    // An unparseable zone must not silently become the host machine's, which produced a window
+    // shifted by the server's own offset while the response echoed the requested zone back.
+    return 0;
   }
+}
+
+/** Whether a string is a zone `Intl` actually knows, so a typo can be rejected not absorbed. */
+export function isValidTimeZone(timeZone: string): boolean {
+  if (!timeZone) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The offset in force at the LOCAL instant, resolved by fixed point. Reading it at UTC midnight
+ * is wrong by the DST delta wherever a transition falls between the two.
+ */
+function offsetForLocalWallClock(guessUtc: number, timeZone: string): number {
+  let offset = offsetMinutesFor(timeZone, new Date(guessUtc));
+  for (let pass = 0; pass < 2; pass++) {
+    const next = offsetMinutesFor(timeZone, new Date(guessUtc - offset * 60_000));
+    if (next === offset) break;
+    offset = next;
+  }
+  return offset;
 }
 
 /** Local wall-clock date string in the given IANA zone. */
@@ -58,15 +85,13 @@ export function localDateIn(timeZone: string, at: Date = new Date()): string {
 export function startOfLocalDayUtc(localDate: string, timeZone: string): string {
   const [y, m, d] = localDate.split('-').map(Number);
   const guess = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1, 0, 0, 0);
-  const offset = offsetMinutesFor(timeZone, new Date(guess));
-  return new Date(guess - offset * 60_000).toISOString();
+  return new Date(guess - offsetForLocalWallClock(guess, timeZone) * 60_000).toISOString();
 }
 
 export function endOfLocalDayUtc(localDate: string, timeZone: string): string {
   const [y, m, d] = localDate.split('-').map(Number);
   const guess = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1, 23, 59, 59, 999);
-  const offset = offsetMinutesFor(timeZone, new Date(guess));
-  return new Date(guess - offset * 60_000).toISOString();
+  return new Date(guess - offsetForLocalWallClock(guess, timeZone) * 60_000).toISOString();
 }
 
 export function addLocalDays(localDate: string, days: number): string {
