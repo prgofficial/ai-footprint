@@ -9,6 +9,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.AI_FOOTPRINT_E2E_PORT ?? 4321);
 // A throwaway data directory, so an end-to-end run can never touch real history.
 const HOME = process.env.AI_FOOTPRINT_E2E_HOME ?? mkdtempSync(join(tmpdir(), 'af-e2e-'));
+// The specs read it back to seed the database directly; without this the runner and the
+// server disagree about where the data directory is.
+process.env.AI_FOOTPRINT_E2E_HOME = HOME;
 
 export default defineConfig({
   testDir: './e2e',

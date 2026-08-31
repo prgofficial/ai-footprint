@@ -6,8 +6,10 @@ import { localDateIn } from '@ai-footprint/database';
 import type {
   ActivityItem,
   CategoryUsage,
+  CostDelta,
   MetricDelta,
   ModelUsage,
+  OverviewPeriod,
   OverviewResponse,
   Paginated,
   ProfileResponse,
@@ -25,7 +27,7 @@ import type {
   TimeseriesResponse,
 } from '@ai-footprint/shared';
 import { NotFound, StoreService } from '../common';
-import { changePct, granularityFor, resolveRange, todayRange } from './range';
+import { changePct, granularityFor, resolveRange } from './range';
 
 interface Scope {
   range: ResolvedRange;
@@ -49,6 +51,28 @@ function share(count: number, total: number): number {
 
 function delta(value: number, previous: number): MetricDelta {
   return { value, previous, changePct: changePct(value, previous) };
+}
+
+/** A range with no priced model reports null, not zero: unknown and free are not the same. */
+function costDelta(value: number | null, previous: number | null): CostDelta {
+  return {
+    value,
+    previous,
+    changePct: value === null || previous === null ? null : changePct(value, previous),
+  };
+}
+
+/**
+ * Claude Code stamps CLI-generated messages with a placeholder model in angle brackets
+ * (`<synthetic>`). Nobody chose it, so it does not belong in a list of models used.
+ */
+function isRealModel(model: string | null | undefined): boolean {
+  return !!model && !model.startsWith('<');
+}
+
+function ratio(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 100) / 100;
 }
 
 function splitList(value: string | null): string[] {
@@ -127,16 +151,11 @@ export class AnalyticsService {
 
   overview(query: RangeQuery): OverviewResponse {
     const store = this.stores.store;
-    const { range, filters, previous, idleTimeoutMs } = this.scope(query);
-
     const scope = this.scope(query);
+    const { range, filters, previous } = scope;
+
     const current = this.totalsFor(scope, filters, scope.days);
     const prior = this.totalsFor(scope, previous, scope.previousDays);
-    const today = store.analytics.totals(
-      { ...filters, ...todayRange(range.timezone) },
-      idleTimeoutMs,
-      ACTIVE_TIME_TAIL_ALLOWANCE_MS,
-    );
 
     const providers = scope.useRollups
       ? store.rollupReads.by('provider_id', filters, scope.days)
@@ -145,32 +164,50 @@ export class AnalyticsService {
       ? store.rollupReads.categories(filters, scope.days)
       : store.analytics.byCategory(filters);
     const projects = scope.useRollups
-      ? store.rollupReads.by('project_id', filters, scope.days, 6)
-      : store.analytics.byProject(filters, 6);
-    const technologies = store.analytics.byTechnology(filters, 8);
+      ? store.rollupReads.by('project_id', filters, scope.days, 8)
+      : store.analytics.byProject(filters, 8);
+    const models = (
+      scope.useRollups
+        ? store.rollupReads.models(filters, scope.days, 8)
+        : store.analytics.byModel(filters).map((row) => ({ key: row.model, count: row.responses }))
+    ).filter((row) => isRealModel(row.key) && row.count > 0);
+    const modelTotal = models.reduce((sum, row) => sum + row.count, 0);
+    const technologies = store.analytics.byTechnology(filters, 10);
+
+    const series = this.timeseries(query);
+    const busiest = series.points.reduce<{ bucket: string; prompts: number } | null>(
+      (best, point) => (best === null || point.prompts > best.prompts ? point : best),
+      null,
+    );
 
     const promptTotal = current.prompts;
+    const period: OverviewPeriod = {
+      prompts: delta(current.prompts, prior.prompts),
+      sessions: delta(current.sessions, prior.sessions),
+      activeMs: delta(current.activeMs, prior.activeMs),
+      tokens: delta(
+        current.inputTokens + current.outputTokens,
+        prior.inputTokens + prior.outputTokens,
+      ),
+      toolCalls: delta(current.toolCalls, prior.toolCalls),
+      estimatedCostUsd: costDelta(current.estimatedCostUsd, prior.estimatedCostUsd),
+      inputTokens: current.inputTokens,
+      outputTokens: current.outputTokens,
+      cacheReadTokens: current.cacheReadTokens,
+      cacheWriteTokens: current.cacheWriteTokens,
+      projects: current.projects,
+      promptsPerSession: ratio(current.prompts, current.sessions),
+      msPerSession: current.sessions > 0 ? Math.round(current.activeMs / current.sessions) : 0,
+      busiestBucket:
+        busiest && busiest.prompts > 0
+          ? { bucket: busiest.bucket, prompts: busiest.prompts }
+          : null,
+    };
 
     return {
       range,
-      today: {
-        prompts: today.prompts,
-        sessions: today.sessions,
-        activeMs: today.activeMs,
-        inputTokens: today.inputTokens,
-        outputTokens: today.outputTokens,
-        estimatedCostUsd: today.estimatedCostUsd,
-      },
-      period: {
-        prompts: delta(current.prompts, prior.prompts),
-        sessions: delta(current.sessions, prior.sessions),
-        activeMs: delta(current.activeMs, prior.activeMs),
-        tokens: delta(
-          current.inputTokens + current.outputTokens,
-          prior.inputTokens + prior.outputTokens,
-        ),
-        estimatedCostUsd: current.estimatedCostUsd,
-      },
+      granularity: series.granularity,
+      period,
       sources: providers.map((row) => ({
         providerId: row.key,
         name: row.name,
@@ -193,7 +230,12 @@ export class AnalyticsService {
         prompts: row.count,
         share: share(row.count, promptTotal),
       })),
-      timeline: this.timeseries(query).points,
+      models: models.slice(0, 8).map((row) => ({
+        model: row.key,
+        responses: row.count,
+        share: share(row.count, modelTotal),
+      })),
+      timeline: series.points,
       totals: {
         events: current.events,
         prompts: current.prompts,
@@ -239,7 +281,9 @@ export class AnalyticsService {
 
   models(query: RangeQuery): ModelUsage[] {
     const { filters } = this.scope(query);
-    const rows = this.stores.store.analytics.byModel(filters);
+    const rows = this.stores.store.analytics
+      .byModel(filters)
+      .filter((row) => isRealModel(row.model));
     const total = rows.reduce((sum, row) => sum + row.events, 0);
     return rows.map((row) => ({ ...row, share: share(row.events, total) }));
   }

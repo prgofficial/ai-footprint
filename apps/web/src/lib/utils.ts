@@ -13,6 +13,12 @@ export function formatNumber(value: number | null | undefined): string {
   return Math.abs(value) >= 10_000 ? COMPACT.format(value) : PLAIN.format(value);
 }
 
+/** Axis ticks have a fixed gutter, so they compact from the first thousand, not the ten-thousandth. */
+export function formatCompact(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '—';
+  return Math.abs(value) >= 1000 ? COMPACT.format(value) : PLAIN.format(value);
+}
+
 export function formatExact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
   return PLAIN.format(value);
@@ -103,4 +109,41 @@ export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function chartColor(index: number): string {
   return `rgb(var(--chart-${(index % 6) + 1}))`;
+}
+
+export type Granularity = 'hour' | 'day' | 'week';
+
+const TICK_DAY = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const FULL_DAY = new Intl.DateTimeFormat(undefined, {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+
+/**
+ * Buckets arrive as the keys the database groups by: `2026-08-31`, `2026-08-31T14`,
+ * `2026-W35`. They are calendar labels, not instants, so they are parsed field by field:
+ * handing `2026-08-31` to `new Date()` would read it as UTC and shift it a day west of here.
+ */
+export function formatBucket(
+  bucket: string,
+  granularity: Granularity,
+  style: 'tick' | 'full',
+): string {
+  if (granularity === 'week') {
+    const [year, week] = bucket.split('-W');
+    if (!week) return bucket;
+    return style === 'tick' ? `W${Number(week)}` : `Week ${Number(week)}, ${year}`;
+  }
+
+  const [datePart, hourPart] = bucket.split('T');
+  const [year, month, day] = (datePart ?? '').split('-').map(Number);
+  if (!year || !month || !day) return bucket;
+  const date = new Date(year, month - 1, day);
+
+  if (granularity === 'hour') {
+    const hour = Number(hourPart ?? 0);
+    return style === 'tick' ? formatHour(hour) : `${TICK_DAY.format(date)}, ${formatHour(hour)}`;
+  }
+  return style === 'tick' ? TICK_DAY.format(date) : FULL_DAY.format(date);
 }

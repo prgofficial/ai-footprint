@@ -255,6 +255,7 @@ export class AnalyticsRepository {
     modelFamily: string | null;
     events: number;
     prompts: number;
+    responses: number;
     inputTokens: number;
     outputTokens: number;
     cacheReadTokens: number;
@@ -266,6 +267,7 @@ export class AnalyticsRepository {
       .prepare(
         `SELECT e.model AS model, e.model_family AS modelFamily, COUNT(*) AS events,
                 SUM(CASE WHEN e.event_type = 'prompt' THEN 1 ELSE 0 END) AS prompts,
+                SUM(CASE WHEN e.event_type = 'response' THEN 1 ELSE 0 END) AS responses,
                 COALESCE(SUM(e.input_tokens), 0) AS inputTokens,
                 COALESCE(SUM(e.output_tokens), 0) AS outputTokens,
                 COALESCE(SUM(e.cache_read_tokens), 0) AS cacheReadTokens,

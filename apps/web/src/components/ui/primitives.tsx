@@ -1,5 +1,6 @@
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { chartColor, cn, formatDelta } from '@/lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md';
@@ -97,14 +98,143 @@ export function Badge({
   );
 }
 
-export function Bar({ value, className }: { value: number; className?: string }) {
+export function Bar({
+  value,
+  className,
+  color,
+}: {
+  value: number;
+  className?: string;
+  color?: string;
+}) {
   const width = Math.max(0, Math.min(100, value));
   return (
     <div
-      className={cn('h-1 w-full overflow-hidden rounded-full bg-sunken', className)}
+      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-sunken', className)}
       role="presentation"
     >
-      <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${width}%` }} />
+      <div
+        className={cn('h-full rounded-full transition-[width] duration-500', !color && 'bg-accent')}
+        style={{ width: `${width}%`, background: color }}
+      />
+    </div>
+  );
+}
+
+/**
+ * A change is a judgement, not a number: the tinted chip makes direction readable at a glance
+ * while the arrow keeps it legible without relying on colour alone (G9).
+ */
+export function DeltaPill({
+  changePct,
+  className,
+  suffix = 'vs previous',
+}: {
+  changePct: number | null;
+  className?: string;
+  suffix?: string;
+}) {
+  // Nothing to compare against is not a flat trend, and a chip claiming 0% would say it was.
+  if (changePct === null) {
+    return (
+      <span
+        className={cn('text-2xs text-subtle', className)}
+        title="No activity in the previous period"
+      >
+        —
+      </span>
+    );
+  }
+
+  const Icon = changePct === 0 ? Minus : changePct > 0 ? ArrowUpRight : ArrowDownRight;
+  const tone =
+    changePct === 0
+      ? 'bg-sunken text-subtle'
+      : changePct > 0
+        ? 'bg-positive/10 text-positive'
+        : 'bg-negative/10 text-negative';
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium whitespace-nowrap',
+        tone,
+        className,
+      )}
+      title={`${formatDelta(changePct)} ${suffix}`}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      {formatDelta(changePct)}
+    </span>
+  );
+}
+
+/**
+ * Hairlines come from a 1px grid gap over a ruled background rather than from `divide-*`,
+ * which draws on DOM order and so puts a stray edge on the first cell of every wrapped row.
+ */
+export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <Card className={cn('overflow-hidden p-0', className)}>
+      <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4 xl:grid-cols-8">{children}</div>
+    </Card>
+  );
+}
+
+/** One cell of the secondary metric strip: dense, aligned, and never louder than a KPI card. */
+export function Stat({
+  label,
+  value,
+  sub,
+  icon,
+  title,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  icon?: ReactNode;
+  title?: string;
+}) {
+  return (
+    <div className="bg-raised px-4 py-3.5" title={title}>
+      <p className="flex items-center gap-1.5 text-2xs font-medium tracking-wide text-subtle uppercase">
+        {icon ? <span className="text-subtle/80">{icon}</span> : null}
+        {label}
+      </p>
+      <p className="tabular mt-1.5 truncate text-base font-semibold text-ink">{value}</p>
+      {sub ? <p className="mt-0.5 truncate text-2xs text-subtle">{sub}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * A proportional bar for a set that competes for one whole. Segments below a pixel or two
+ * read as noise, so anything under 1.5% is folded into the neighbouring share.
+ */
+export function SegmentedMeter({
+  segments,
+  className,
+}: {
+  segments: Array<{ key: string; label: string; value: number }>;
+  className?: string;
+}) {
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+  if (total <= 0) return null;
+
+  return (
+    <div className={cn('flex h-2 w-full gap-0.5 overflow-hidden rounded-full', className)}>
+      {segments.map((segment, index) => {
+        const pct = (segment.value / total) * 100;
+        if (pct < 1.5) return null;
+        return (
+          <div
+            key={segment.key}
+            className="h-full first:rounded-l-full last:rounded-r-full"
+            style={{ width: `${pct}%`, background: chartColor(index) }}
+            title={`${segment.label} · ${Math.round(pct)}%`}
+          />
+        );
+      })}
     </div>
   );
 }

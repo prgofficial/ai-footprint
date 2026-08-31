@@ -1,101 +1,285 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus } from 'lucide-react';
+import {
+  ArrowRight,
+  Boxes,
+  Clock3,
+  Fingerprint,
+  Layers,
+  Plug,
+  Repeat2,
+  Wrench,
+} from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { FilterBar } from '@/components/layout/filter-bar';
-import { PageHeader, Section } from '@/components/layout/page';
-import { AreaTrend, ChartFrame, DonutChart } from '@/components/charts/primitives';
-import { Bar, Badge, Card, CardHeader } from '@/components/ui/primitives';
+import { PageHeader } from '@/components/layout/page';
+import { AreaTrend, ChartFrame, Sparkline } from '@/components/charts/primitives';
+import {
+  Badge,
+  Bar,
+  Card,
+  CardHeader,
+  DeltaPill,
+  SegmentedMeter,
+  Stat,
+  StatGrid,
+} from '@/components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonChart, SkeletonMetrics } from '@/components/ui/states';
 import { useFilters } from '@/hooks/useFilters';
 import { useOverview } from '@/lib/queries';
 import {
   chartColor,
   cn,
+  formatBucket,
+  formatCompact,
   formatCost,
   formatDate,
-  formatDelta,
   formatDuration,
   formatExact,
   formatNumber,
   formatPercent,
+  type Granularity,
 } from '@/lib/utils';
-import type { MetricDelta } from '@ai-footprint/shared';
+import type { MetricDelta, OverviewResponse, TimeseriesPoint } from '@ai-footprint/shared';
 
-function Metric({
+/**
+ * A headline figure for the selected range. The sparkline is the same range again, in shape
+ * rather than in total, so the number and its story sit in one glance.
+ */
+function Kpi({
   label,
   value,
   sub,
   delta,
+  series,
   hint,
 }: {
   label: string;
   value: string;
-  sub?: string;
-  delta?: MetricDelta;
+  sub: ReactNode;
+  delta?: MetricDelta | { changePct: number | null };
+  series: number[];
   hint?: string;
 }) {
-  const change = delta?.changePct ?? null;
-  const Icon = change === null || change === 0 ? Minus : change > 0 ? ArrowUpRight : ArrowDownRight;
-  const tone =
-    change === null || change === 0
-      ? 'text-subtle'
-      : change > 0
-        ? 'text-positive'
-        : 'text-negative';
-
   return (
-    <Card className="p-5">
-      <p className="text-2xs font-medium tracking-wide text-subtle uppercase">{label}</p>
-      <p className="tabular mt-2 text-2xl font-semibold tracking-tight text-ink" title={hint}>
-        {value}
-      </p>
-      <div className="mt-2 flex items-center gap-1.5 text-xs">
-        {delta ? (
-          <>
-            <Icon className={cn('size-3', tone)} aria-hidden="true" />
-            <span className={tone}>{formatDelta(change)}</span>
-            <span className="text-subtle">vs previous period</span>
-          </>
-        ) : (
-          <span className="text-subtle">{sub}</span>
-        )}
+    <Card className="flex flex-col overflow-hidden p-0 transition-colors hover:border-line-strong">
+      <div className="flex-1 px-5 pt-4 pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-2xs font-medium tracking-wide text-subtle uppercase">{label}</p>
+          {delta ? <DeltaPill changePct={delta.changePct} /> : null}
+        </div>
+        <p
+          className="tabular mt-2.5 text-3xl leading-none font-semibold tracking-tight text-ink"
+          title={hint}
+        >
+          {value}
+        </p>
+        <p className="mt-2 truncate text-xs text-subtle">{sub}</p>
       </div>
+      <Sparkline values={series} className="h-9 w-full" />
     </Card>
   );
 }
 
+/** Three ranked cards side by side only read as a set if they are the same height. */
+const TOP_N = 8;
+
+interface RankRow {
+  key: string;
+  name: string;
+  value: number;
+  share: number;
+}
+
+/**
+ * Bars are scaled against the leader rather than against 100%, because a top-N list is read
+ * for its order and relative weight. The percentage beside each row keeps the absolute truth.
+ */
 function RankedList({
   rows,
   emptyLabel,
   linkTo,
 }: {
-  rows: Array<{ key: string; name: string; prompts: number; share: number }>;
+  rows: RankRow[];
   emptyLabel: string;
   linkTo?: (key: string) => string;
 }) {
   if (rows.length === 0) {
     return <p className="px-5 pb-5 text-xs text-subtle">{emptyLabel}</p>;
   }
+  const leader = Math.max(...rows.map((row) => row.share), 0.0001);
+
   return (
-    <ul className="space-y-2.5 px-5 pb-5">
+    <ul className="space-y-3 px-5 pb-5">
       {rows.map((row, index) => (
         <li key={row.key}>
-          <div className="mb-1 flex items-baseline justify-between gap-3">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ background: chartColor(index) }}
+              aria-hidden="true"
+            />
             {linkTo ? (
-              <Link to={linkTo(row.key)} className="truncate text-xs text-ink hover:text-accent">
+              <Link
+                to={linkTo(row.key)}
+                className="truncate text-xs text-ink transition-colors hover:text-accent"
+              >
                 {row.name}
               </Link>
             ) : (
               <span className="truncate text-xs text-ink">{row.name}</span>
             )}
-            <span className="tabular shrink-0 text-xs text-subtle">
+            <span className="tabular ml-auto shrink-0 text-xs font-medium text-ink">
+              {formatNumber(row.value)}
+            </span>
+            <span className="tabular w-11 shrink-0 text-right text-2xs text-subtle">
               {formatPercent(row.share, row.share < 10 ? 1 : 0)}
             </span>
           </div>
-          <Bar value={row.share} className={index === 0 ? '' : 'opacity-70'} />
+          <Bar
+            value={(row.share / leader) * 100}
+            color={chartColor(index)}
+            className={index === 0 ? '' : 'opacity-75'}
+          />
         </li>
       ))}
     </ul>
   );
+}
+
+interface TimelineMetric {
+  key: string;
+  label: string;
+  read: (point: TimeseriesPoint) => number;
+  format: (value: number) => string;
+  axis: (value: number) => string;
+  decimals: boolean;
+}
+
+const PROMPTS_METRIC: TimelineMetric = {
+  key: 'prompts',
+  label: 'Prompts',
+  read: (point) => point.prompts,
+  format: (value) => formatExact(value),
+  axis: (value) => formatCompact(value),
+  decimals: false,
+};
+
+function timelineMetrics(data: OverviewResponse): TimelineMetric[] {
+  const metrics: TimelineMetric[] = [PROMPTS_METRIC];
+
+  // Active time is only summed per day; at hour and week granularity it comes back as zero,
+  // and an axis of zeroes is worse than not offering the choice.
+  if (data.granularity === 'day') {
+    metrics.push({
+      key: 'active',
+      label: 'Active time',
+      read: (point) => point.activeMs,
+      format: (value) => formatDuration(value),
+      axis: (value) => formatDuration(value),
+      decimals: false,
+    });
+  }
+  if (data.period.tokens.value > 0) {
+    metrics.push({
+      key: 'tokens',
+      label: 'Tokens',
+      read: (point) => point.inputTokens + point.outputTokens,
+      format: (value) => formatExact(value),
+      axis: (value) => formatCompact(value),
+      decimals: false,
+    });
+  }
+  if (data.period.estimatedCostUsd.value !== null) {
+    metrics.push({
+      key: 'cost',
+      label: 'Cost',
+      read: (point) => point.estimatedCostUsd ?? 0,
+      format: (value) => formatCost(value),
+      axis: (value) => formatCost(value),
+      decimals: true,
+    });
+  }
+  return metrics;
+}
+
+function Timeline({ data }: { data: OverviewResponse }) {
+  const [selected, setSelected] = useState('prompts');
+  const metrics = useMemo(() => timelineMetrics(data), [data]);
+  // The chosen metric can disappear when the range changes granularity; fall back rather
+  // than render an empty chart.
+  const metric = metrics.find((entry) => entry.key === selected) ?? PROMPTS_METRIC;
+  const granularity = data.granularity as Granularity;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Activity timeline"
+        description={`${formatExact(data.totals.prompts)} prompts across ${formatExact(data.totals.sessions)} sessions`}
+      />
+      <div className="px-3 pb-4">
+        <ChartFrame
+          label={`${metric.label} over time`}
+          height={260}
+          controls={
+            metrics.length > 1 ? (
+              <div
+                className="inline-flex rounded-md border border-line bg-sunken p-0.5"
+                role="group"
+                aria-label="Timeline metric"
+              >
+                {metrics.map((entry) => (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    aria-pressed={metric.key === entry.key}
+                    onClick={() => setSelected(entry.key)}
+                    className={cn(
+                      'rounded px-2.5 py-1 text-2xs font-medium whitespace-nowrap transition-colors',
+                      metric.key === entry.key
+                        ? 'bg-raised text-ink shadow-card'
+                        : 'text-subtle hover:text-ink',
+                    )}
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </div>
+            ) : null
+          }
+          table={{
+            columns: ['Date', 'Prompts', 'Sessions', 'Active time', 'Tokens', 'Cost'],
+            rows: data.timeline.map((point) => [
+              formatBucket(point.bucket, granularity, 'full'),
+              point.prompts,
+              point.sessions,
+              formatDuration(point.activeMs),
+              formatExact(point.inputTokens + point.outputTokens),
+              formatCost(point.estimatedCostUsd),
+            ]),
+          }}
+        >
+          <AreaTrend
+            name={metric.label}
+            allowDecimals={metric.decimals}
+            formatter={(value) => metric.format(Number(value))}
+            axisFormatter={(value) => metric.axis(value)}
+            tickFormatter={(label) => formatBucket(label, granularity, 'tick')}
+            labelFormatter={(label) => formatBucket(label, granularity, 'full')}
+            data={data.timeline.map((point) => ({
+              label: point.bucket,
+              value: metric.read(point),
+            }))}
+          />
+        </ChartFrame>
+      </div>
+    </Card>
+  );
+}
+
+function cacheReuse(period: OverviewResponse['period']): number | null {
+  const inbound = period.inputTokens + period.cacheReadTokens + period.cacheWriteTokens;
+  if (inbound <= 0) return null;
+  return (period.cacheReadTokens / inbound) * 100;
 }
 
 export function OverviewPage() {
@@ -114,7 +298,7 @@ export function OverviewPage() {
         description="How much you are using AI, and what for."
         actions={
           data ? (
-            <span className="text-2xs text-subtle">
+            <span className="rounded-full border border-line bg-raised px-2.5 py-1 text-2xs text-subtle">
               {formatDate(data.range.from)} – {formatDate(data.range.to)} · {data.range.timezone}
             </span>
           ) : null
@@ -123,9 +307,10 @@ export function OverviewPage() {
       <FilterBar dimensions={['provider', 'project', 'category', 'model']} />
 
       {query.isLoading || !data ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <SkeletonMetrics />
-          <SkeletonChart className="h-64 w-full" />
+          <SkeletonChart className="h-20 w-full" />
+          <SkeletonChart className="h-72 w-full" />
         </div>
       ) : !hasData ? (
         <Card>
@@ -143,178 +328,220 @@ export function OverviewPage() {
           />
         </Card>
       ) : (
-        <div className="space-y-6">
-          <Section title="Today">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Metric
-                label="Prompts"
-                value={formatExact(data.today.prompts)}
-                sub="submitted today"
-              />
-              <Metric
-                label="Sessions"
-                value={formatExact(data.today.sessions)}
-                sub="started today"
-              />
-              <Metric
-                label="Active time"
-                value={formatDuration(data.today.activeMs)}
-                sub="idle gaps excluded"
-              />
-              <Metric
-                label="Tokens"
-                value={formatNumber(data.today.inputTokens + data.today.outputTokens)}
-                sub={`${formatNumber(data.today.inputTokens)} in · ${formatNumber(data.today.outputTokens)} out`}
-                hint={`${formatExact(data.today.inputTokens)} in, ${formatExact(data.today.outputTokens)} out`}
-              />
-            </div>
-          </Section>
+        <PeriodDashboard data={data} range={filters.range} />
+      )}
+    </>
+  );
+}
 
-          <Section title="This period">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Metric
-                label="Prompts"
-                value={formatExact(data.period.prompts.value)}
-                delta={data.period.prompts}
-              />
-              <Metric
-                label="Sessions"
-                value={formatExact(data.period.sessions.value)}
-                delta={data.period.sessions}
-              />
-              <Metric
-                label="Active time"
-                value={formatDuration(data.period.activeMs.value)}
-                delta={data.period.activeMs}
-              />
-              <Metric
-                label="Estimated cost"
-                value={formatCost(data.period.estimatedCostUsd)}
-                sub="at list API prices"
-                hint="Estimated from token counts and published list prices. It does not reflect a subscription."
-              />
-            </div>
-          </Section>
+function PeriodDashboard({ data, range }: { data: OverviewResponse; range: string }) {
+  const { period, timeline } = data;
+  const reuse = cacheReuse(period);
+  const busiest = period.busiestBucket;
+  const granularity = data.granularity as Granularity;
 
-          <Card>
-            <CardHeader
-              title="Activity timeline"
-              description={`${formatExact(data.totals.prompts)} prompts across ${formatExact(data.totals.sessions)} sessions`}
-            />
-            <div className="px-3 pb-4">
-              <ChartFrame
-                label="Prompts over time"
-                height={240}
-                table={{
-                  columns: ['Date', 'Prompts', 'Active time'],
-                  rows: data.timeline.map((point) => [
-                    point.bucket,
-                    point.prompts,
-                    formatDuration(point.activeMs),
-                  ]),
-                }}
-              >
-                <AreaTrend
-                  name="Prompts"
-                  data={data.timeline.map((point) => ({
-                    label: point.bucket,
-                    value: point.prompts,
-                  }))}
-                />
-              </ChartFrame>
-            </div>
-          </Card>
+  const technologyTotal = data.technologies.reduce((sum, row) => sum + row.prompts, 0);
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card>
-              <CardHeader title="Sources" description="Which tools the activity came from" />
-              {data.sources.length > 1 ? (
-                <div className="px-3 pb-2">
-                  <ChartFrame
-                    label="Prompts by source"
-                    height={180}
-                    table={{
-                      columns: ['Source', 'Prompts'],
-                      rows: data.sources.map((s) => [s.name, s.prompts]),
-                    }}
-                  >
-                    <DonutChart
-                      data={data.sources.map((s) => ({ label: s.name, value: s.prompts }))}
-                    />
-                  </ChartFrame>
-                </div>
-              ) : null}
-              <RankedList
-                rows={data.sources.map((s) => ({
-                  key: s.providerId,
-                  name: s.name,
-                  prompts: s.prompts,
-                  share: s.share,
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label="Prompts"
+          value={formatExact(period.prompts.value)}
+          delta={period.prompts}
+          sub={`${formatExact(period.prompts.previous)} in the period before`}
+          series={timeline.map((point) => point.prompts)}
+        />
+        <Kpi
+          label="Active time"
+          value={formatDuration(period.activeMs.value)}
+          delta={period.activeMs}
+          sub="idle gaps excluded"
+          series={timeline.map((point) => (granularity === 'day' ? point.activeMs : point.prompts))}
+        />
+        <Kpi
+          label="Tokens"
+          value={formatNumber(period.tokens.value)}
+          delta={period.tokens}
+          hint={`${formatExact(period.inputTokens)} in, ${formatExact(period.outputTokens)} out`}
+          sub={`${formatNumber(period.inputTokens)} in · ${formatNumber(period.outputTokens)} out`}
+          series={timeline.map((point) => point.inputTokens + point.outputTokens)}
+        />
+        <Kpi
+          label="Estimated cost"
+          value={formatCost(period.estimatedCostUsd.value)}
+          delta={period.estimatedCostUsd.changePct === null ? undefined : period.estimatedCostUsd}
+          hint="Estimated from token counts and published list prices. It does not reflect a subscription."
+          sub="at list API prices"
+          series={timeline.map((point) => point.estimatedCostUsd ?? 0)}
+        />
+      </div>
+
+      <StatGrid>
+        <Stat
+          label="Sessions"
+          icon={<Layers className="size-3" aria-hidden="true" />}
+          value={formatExact(period.sessions.value)}
+          sub={<DeltaPill changePct={period.sessions.changePct} />}
+        />
+        <Stat
+          label="Tool calls"
+          icon={<Wrench className="size-3" aria-hidden="true" />}
+          value={formatNumber(period.toolCalls.value)}
+          sub={<DeltaPill changePct={period.toolCalls.changePct} />}
+          title="Edits, searches and commands the assistant ran on your behalf."
+        />
+        <Stat
+          label="Projects"
+          icon={<Boxes className="size-3" aria-hidden="true" />}
+          value={formatExact(period.projects)}
+          sub="with activity"
+        />
+        <Stat
+          label="Sources"
+          icon={<Plug className="size-3" aria-hidden="true" />}
+          value={
+            data.sources.length === 1 ? data.sources[0]!.name : formatExact(data.sources.length)
+          }
+          sub={data.sources.length === 1 ? 'the only tool used' : 'connected tools'}
+          title={data.sources.map((source) => source.name).join(', ')}
+        />
+        <Stat
+          label="Per session"
+          icon={<Repeat2 className="size-3" aria-hidden="true" />}
+          value={
+            period.promptsPerSession >= 10
+              ? formatExact(Math.round(period.promptsPerSession))
+              : period.promptsPerSession.toFixed(1)
+          }
+          sub="prompts on average"
+        />
+        <Stat
+          label="Session length"
+          icon={<Clock3 className="size-3" aria-hidden="true" />}
+          value={formatDuration(period.msPerSession)}
+          sub="active time, average"
+        />
+        <Stat
+          label="Cache reuse"
+          icon={<Fingerprint className="size-3" aria-hidden="true" />}
+          value={reuse === null ? '—' : formatPercent(reuse)}
+          sub="of context re-read"
+          title="Share of incoming tokens served from the prompt cache rather than sent afresh."
+        />
+        <Stat
+          label="Busiest"
+          value={busiest ? formatBucket(busiest.bucket, granularity, 'tick') : '—'}
+          sub={busiest ? `${formatExact(busiest.prompts)} prompts` : 'no activity'}
+        />
+      </StatGrid>
+
+      <Timeline data={data} />
+
+      <div className="grid items-start gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader
+            title="Top areas"
+            description="What you brought to AI"
+            action={
+              data.categories.length > TOP_N ? (
+                <Link
+                  to={`/prompts/analytics?range=${range}`}
+                  className="text-2xs text-subtle transition-colors hover:text-accent"
+                >
+                  All {data.categories.length}
+                </Link>
+              ) : null
+            }
+          />
+          <RankedList
+            rows={data.categories.slice(0, TOP_N).map((row) => ({
+              key: row.category,
+              name: row.category,
+              value: row.prompts,
+              share: row.share,
+            }))}
+            emptyLabel="Nothing classified yet."
+            linkTo={(key) => `/prompts?range=${range}&category=${encodeURIComponent(key)}`}
+          />
+        </Card>
+
+        <Card>
+          <CardHeader title="Top projects" description="Where the work happened" />
+          <RankedList
+            rows={data.projects.map((row) => ({
+              key: row.projectId,
+              name: row.name,
+              value: row.prompts,
+              share: row.share,
+            }))}
+            emptyLabel="No projects detected yet."
+            linkTo={(key) => `/prompts?range=${range}&projectId=${encodeURIComponent(key)}`}
+          />
+        </Card>
+
+        <Card>
+          <CardHeader title="Models" description="Which model did the answering" />
+          <RankedList
+            rows={data.models.slice(0, TOP_N).map((row) => ({
+              key: row.model,
+              name: row.model,
+              value: row.responses,
+              share: row.share,
+            }))}
+            emptyLabel="No model recorded yet."
+            linkTo={(key) => `/activity?range=${range}&model=${encodeURIComponent(key)}`}
+          />
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader
+          title="Top technologies"
+          description="What you talked about most"
+          action={
+            data.technologies.length > 0 ? (
+              <span className="text-2xs text-subtle">{formatExact(technologyTotal)} mentions</span>
+            ) : null
+          }
+        />
+        <div className="px-5 pb-5">
+          {data.technologies.length === 0 ? (
+            <p className="text-xs text-subtle">No technologies detected yet.</p>
+          ) : (
+            <>
+              <SegmentedMeter
+                segments={data.technologies.map((row) => ({
+                  key: row.technology,
+                  label: row.technology,
+                  value: row.prompts,
                 }))}
-                emptyLabel="No sources yet."
               />
-            </Card>
-
-            <Card>
-              <CardHeader title="Top areas" description="What you brought to AI" />
-              <RankedList
-                rows={data.categories.map((c) => ({
-                  key: c.category,
-                  name: c.category,
-                  prompts: c.prompts,
-                  share: c.share,
-                }))}
-                emptyLabel="Nothing classified yet."
-                linkTo={(key) =>
-                  `/prompts?range=${filters.range}&category=${encodeURIComponent(key)}`
-                }
-              />
-            </Card>
-
-            <Card>
-              <CardHeader title="Top projects" description="Where the work happened" />
-              <RankedList
-                rows={data.projects.map((p) => ({
-                  key: p.projectId,
-                  name: p.name,
-                  prompts: p.prompts,
-                  share: p.share,
-                }))}
-                emptyLabel="No projects detected yet."
-                linkTo={(key) =>
-                  `/prompts?range=${filters.range}&projectId=${encodeURIComponent(key)}`
-                }
-              />
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader title="Top technologies" description="What you talked about most" />
-            <div className="flex flex-wrap gap-1.5 px-5 pb-5">
-              {data.technologies.length === 0 ? (
-                <p className="text-xs text-subtle">No technologies detected yet.</p>
-              ) : (
-                data.technologies.map((technology, index) => (
+              <div className="mt-3.5 flex flex-wrap gap-1.5">
+                {data.technologies.map((row, index) => (
                   <Link
-                    key={technology.technology}
-                    to={`/prompts?range=${filters.range}&technology=${encodeURIComponent(technology.technology)}`}
+                    key={row.technology}
+                    to={`/prompts?range=${range}&technology=${encodeURIComponent(row.technology)}`}
                   >
-                    <Badge tone={index === 0 ? 'accent' : 'neutral'} className="gap-1.5">
+                    <Badge
+                      tone="neutral"
+                      className="gap-1.5 py-1 transition-colors hover:border-line-strong hover:text-ink"
+                    >
                       <span
                         className="size-1.5 rounded-full"
                         style={{ background: chartColor(index) }}
                         aria-hidden="true"
                       />
-                      {technology.technology}
-                      <span className="tabular text-subtle">{technology.prompts}</span>
+                      {row.technology}
+                      <span className="tabular text-subtle">{formatNumber(row.prompts)}</span>
                     </Badge>
                   </Link>
-                ))
-              )}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </>
+          )}
         </div>
-      )}
-    </>
+      </Card>
+    </div>
   );
 }

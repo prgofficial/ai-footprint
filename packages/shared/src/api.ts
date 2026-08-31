@@ -112,27 +112,46 @@ export interface MetricDelta {
   changePct: number | null;
 }
 
+/** Cost is null when no priced model was seen, which is different from costing nothing. */
+export interface CostDelta {
+  value: number | null;
+  previous: number | null;
+  changePct: number | null;
+}
+
+/**
+ * Every figure here describes the selected range and nothing else. There is deliberately no
+ * separate "today" block: "today" is one of the range presets, so a second fixed window on
+ * the same screen would contradict the filter the reader just set.
+ */
+export interface OverviewPeriod {
+  prompts: MetricDelta;
+  sessions: MetricDelta;
+  activeMs: MetricDelta;
+  tokens: MetricDelta;
+  toolCalls: MetricDelta;
+  estimatedCostUsd: CostDelta;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  projects: number;
+  promptsPerSession: number;
+  msPerSession: number;
+  busiestBucket: { bucket: string; prompts: number } | null;
+}
+
 export interface OverviewResponse {
   range: ResolvedRange;
-  today: {
-    prompts: number;
-    sessions: number;
-    activeMs: number;
-    inputTokens: number;
-    outputTokens: number;
-    estimatedCostUsd: number | null;
-  };
-  period: {
-    prompts: MetricDelta;
-    sessions: MetricDelta;
-    activeMs: MetricDelta;
-    tokens: MetricDelta;
-    estimatedCostUsd: number | null;
-  };
+  /** Bucket size of `timeline`; active time is only meaningful at day granularity. */
+  granularity: 'hour' | 'day' | 'week';
+  period: OverviewPeriod;
   sources: Array<{ providerId: string; name: string; prompts: number; share: number }>;
   categories: Array<{ category: PromptCategory; prompts: number; share: number }>;
   projects: Array<{ projectId: string; name: string; prompts: number; share: number }>;
   technologies: Array<{ technology: string; prompts: number; share: number }>;
+  /** Counted on replies, which is where a transcript records the model. */
+  models: Array<{ model: string; responses: number; share: number }>;
   timeline: TimeseriesPoint[];
   totals: { events: number; prompts: number; sessions: number; projects: number };
 }
@@ -158,6 +177,7 @@ export interface ModelUsage {
   modelFamily: string | null;
   events: number;
   prompts: number;
+  responses: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;

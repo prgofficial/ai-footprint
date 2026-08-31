@@ -138,6 +138,23 @@ export class RollupReadRepository {
       .all(...where.params, limit) as NamedCount[];
   }
 
+  /**
+   * A transcript records the model on the reply, never on the prompt, so a model breakdown
+   * has to be counted on replies. `by()` counts prompts and would report nothing here.
+   */
+  models(filters: EventFilters, days: { from: string; to: string }, limit = 100): NamedCount[] {
+    const where = buildRollupWhere(filters, days);
+    return this.connection
+      .prepare(
+        `SELECT r.model AS key, r.model AS name, SUM(r.responses) AS count
+         FROM daily_rollups r
+         WHERE ${where.sql} AND r.model != ''
+         GROUP BY r.model HAVING count > 0
+         ORDER BY count DESC LIMIT ?`,
+      )
+      .all(...where.params, limit) as NamedCount[];
+  }
+
   categories(
     filters: EventFilters,
     days: { from: string; to: string },

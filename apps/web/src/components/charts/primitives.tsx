@@ -1,9 +1,10 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
   Pie,
   PieChart,
@@ -34,6 +35,7 @@ function ChartTooltip({
   payload,
   label,
   formatter,
+  labelFormatter,
 }: {
   active?: boolean;
   payload?: Array<{
@@ -44,12 +46,15 @@ function ChartTooltip({
   }>;
   label?: string | number;
   formatter?: (value: number | string, name: string) => string;
+  labelFormatter?: (label: string) => string;
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border border-line bg-raised px-2.5 py-2 shadow-pop">
+    <div className="rounded-lg border border-line bg-raised px-3 py-2 shadow-pop">
       {label !== undefined ? (
-        <p className="mb-1 text-2xs font-medium text-subtle">{String(label)}</p>
+        <p className="mb-1.5 text-2xs font-medium text-subtle">
+          {labelFormatter ? labelFormatter(String(label)) : String(label)}
+        </p>
       ) : null}
       {payload.map((entry, index) => (
         <p key={index} className="flex items-center gap-2 text-xs text-ink">
@@ -80,18 +85,22 @@ export function ChartFrame({
   height = 224,
   label,
   className,
+  controls,
 }: {
   children: ReactNode;
   table: { columns: string[]; rows: Array<Array<string | number>> };
   height?: number;
   label: string;
   className?: string;
+  /** Chart-level controls, shown on the same row as the table toggle. */
+  controls?: ReactNode;
 }) {
   const [showTable, setShowTable] = useState(false);
 
   return (
     <div className={className}>
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-2">
+        <div className="min-w-0">{controls}</div>
         <Button
           size="sm"
           variant="ghost"
@@ -159,27 +168,48 @@ export function AreaTrend({
   data,
   name,
   formatter,
+  axisFormatter,
+  tickFormatter,
+  labelFormatter,
+  allowDecimals = false,
   ...size
 }: {
   data: SeriesPoint[];
   name: string;
   formatter?: (value: number | string) => string;
+  /** Value-axis ticks are cramped; they get a shorter label than the tooltip does. */
+  axisFormatter?: (value: number) => string;
+  tickFormatter?: (label: string) => string;
+  labelFormatter?: (label: string) => string;
+  allowDecimals?: boolean;
 } & Sized) {
   const animate = !prefersReducedMotion();
   return (
-    <AreaChart {...size} data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+    <AreaChart {...size} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -14 }}>
       <defs>
         <linearGradient id="area-accent" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.24} />
-          <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0.02} />
+          <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity={0.28} />
+          <stop offset="55%" stopColor="rgb(var(--accent))" stopOpacity={0.08} />
+          <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity={0} />
         </linearGradient>
       </defs>
-      <XAxis dataKey="label" {...AXIS} minTickGap={28} />
-      <YAxis {...AXIS} width={44} allowDecimals={false} />
+      <CartesianGrid stroke="rgb(var(--border))" strokeDasharray="2 4" vertical={false} />
+      <XAxis dataKey="label" {...AXIS} minTickGap={28} tickFormatter={tickFormatter} />
+      <YAxis
+        {...AXIS}
+        width={52}
+        allowDecimals={allowDecimals}
+        tickFormatter={(value: number) =>
+          axisFormatter ? axisFormatter(value) : formatter ? formatter(value) : String(value)
+        }
+      />
       <Tooltip
-        cursor={{ stroke: 'rgb(var(--border-strong))' }}
+        cursor={{ stroke: 'rgb(var(--accent))', strokeWidth: 1, strokeDasharray: '3 3' }}
         content={
-          <ChartTooltip formatter={(value) => (formatter ? formatter(value) : String(value))} />
+          <ChartTooltip
+            formatter={(value) => (formatter ? formatter(value) : String(value))}
+            labelFormatter={labelFormatter}
+          />
         }
       />
       <Area
@@ -187,13 +217,74 @@ export function AreaTrend({
         dataKey="value"
         name={name}
         stroke="rgb(var(--accent))"
-        strokeWidth={1.75}
+        strokeWidth={2}
         fill="url(#area-accent)"
         isAnimationActive={animate}
         dot={false}
-        activeDot={{ r: 3, strokeWidth: 0 }}
+        activeDot={{ r: 3.5, strokeWidth: 2, stroke: 'rgb(var(--surface-raised))' }}
       />
     </AreaChart>
+  );
+}
+
+/**
+ * A metric card carries its own shape of the range. Recharts is far too much machinery for a
+ * 32px trace that has no axes, no tooltip and no interaction, so this draws the path directly.
+ */
+export function Sparkline({
+  values,
+  className,
+  color = 'rgb(var(--accent))',
+}: {
+  values: number[];
+  className?: string;
+  color?: string;
+}) {
+  const gradientId = useId();
+  const width = 100;
+  const height = 32;
+
+  const path = useMemo(() => {
+    if (values.length === 0) return null;
+    const points = values.length === 1 ? [values[0]!, values[0]!] : values;
+    const max = Math.max(...points);
+    const min = Math.min(...points);
+    const span = max - min || 1;
+    const step = width / (points.length - 1);
+    // A flat series sits on the baseline rather than halfway up, where it would read as data.
+    const y = (value: number) =>
+      max === min ? height - 3 : height - 3 - ((value - min) / span) * (height - 6);
+    const line = points.map((value, index) => `${index * step},${y(value)}`).join(' L ');
+    return { line: `M ${line}`, area: `M ${line} L ${width},${height} L 0,${height} Z` };
+  }, [values]);
+
+  if (!path) return null;
+
+  return (
+    <svg
+      className={className}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={path.area} fill={`url(#${gradientId})`} />
+      <path
+        d={path.line}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
 }
 

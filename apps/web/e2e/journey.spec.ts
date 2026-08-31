@@ -63,6 +63,36 @@ test.describe('with real analytics', () => {
     await expect(page.getByRole('link', { name: 'Debugging' })).toBeVisible();
   });
 
+  test('every figure on the overview follows the range filter', async ({ page, request }) => {
+    for (const range of ['7d', 'all']) {
+      const body = (await (
+        await request.get(`/api/analytics/overview?range=${range}&timezone=UTC`)
+      ).json()) as { totals: { prompts: number; sessions: number } };
+
+      await page.goto(`/?range=${range}`);
+      await expect(
+        page.getByText(`${body.totals.prompts} prompts across ${body.totals.sessions} sessions`),
+      ).toBeVisible();
+      // "Today" is a range to choose, not a second window pinned above the chosen one.
+      await expect(page.getByRole('heading', { name: 'Today' })).toHaveCount(0);
+    }
+  });
+
+  test('the overview reports tokens, cost and the work behind them', async ({ page }) => {
+    await page.goto('/?range=30d');
+    await expect(page.getByText('Estimated cost')).toBeVisible();
+    await expect(page.getByText('Cache reuse')).toBeVisible();
+    await expect(page.getByText('Tool calls')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'claude-opus-4-8' })).toBeVisible();
+  });
+
+  test('the timeline redraws for another metric', async ({ page }) => {
+    await page.goto('/?range=30d');
+    await expect(page.getByRole('img', { name: 'Prompts over time' })).toBeVisible();
+    await page.getByRole('button', { name: 'Tokens', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Tokens over time' })).toBeVisible();
+  });
+
   test('a chart can be read as a table', async ({ page }) => {
     await page.goto('/?range=30d');
     await page.getByRole('button', { name: 'Show data' }).first().click();

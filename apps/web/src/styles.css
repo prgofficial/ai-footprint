@@ -46,7 +46,9 @@
   --ink-subtle: 105 98 93;
   --accent: 180 60 11;
   --accent-soft: 255 237 213;
-  --positive: 21 128 61;
+  /* Deep enough to clear 4.5:1 as 11px text on its own 10% tint, which is how a delta chip
+     draws it. green-700 measured 4.39:1 there. */
+  --positive: 22 101 52;
   --negative: 185 28 28;
   --chart-1: 194 65 12;
   --chart-2: 120 113 108;

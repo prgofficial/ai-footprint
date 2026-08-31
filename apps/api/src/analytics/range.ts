@@ -75,11 +75,6 @@ export function granularityFor(range: ResolvedRange): 'hour' | 'day' | 'week' {
   return 'week';
 }
 
-export function todayRange(timezone: string): { from: string; to: string } {
-  const today = localDateIn(timezone);
-  return { from: startOfLocalDayUtc(today, timezone), to: endOfLocalDayUtc(today, timezone) };
-}
-
 export function changePct(current: number, previous: number): number | null {
   if (previous === 0) return current === 0 ? 0 : null;
   return Math.round(((current - previous) / previous) * 1000) / 10;

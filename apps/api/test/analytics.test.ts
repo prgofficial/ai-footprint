@@ -154,6 +154,76 @@ describe('range resolution', () => {
   });
 });
 
+describe('overview headline metrics', () => {
+  it('reports one set of figures for the selected range and no second fixed window', async () => {
+    const week = await overview('7d');
+    const month = await overview('30d');
+
+    expect(week).not.toHaveProperty('today');
+    expect(week.period.prompts.value).toBe(week.totals.prompts);
+    expect(week.period.prompts.value).toBe(6 + 4 + 3);
+    expect(month.period.prompts.value).toBe(TOTAL_PROMPTS);
+  });
+
+  it('compares every headline against the window immediately before it', async () => {
+    const week = await overview('7d');
+    // The seven days before the last seven contain only the nine-day-old session.
+    expect(week.period.prompts.previous).toBe(5);
+    expect(week.period.prompts.changePct).toBe(160);
+    expect(week.period.sessions.value).toBe(3);
+    expect(week.period.sessions.previous).toBe(1);
+  });
+
+  it('carries the token split and cache counters behind the tokens headline', async () => {
+    const week = await overview('7d');
+    const replies = 6 + 4 + 3;
+    expect(week.period.inputTokens).toBe(replies * 100);
+    expect(week.period.outputTokens).toBe(replies * 50);
+    expect(week.period.cacheReadTokens).toBe(replies * 900);
+    expect(week.period.tokens.value).toBe(replies * 150);
+    expect(week.period.tokens.previous).toBe(5 * 150);
+  });
+
+  it('gives cost a comparison rather than a bare number', async () => {
+    const week = await overview('7d');
+    // 10 opus replies at 0.0066 each plus 3 sonnet replies at 0.00132 each.
+    expect(week.period.estimatedCostUsd.value).toBeCloseTo(0.06996, 5);
+    expect(week.period.estimatedCostUsd.previous).toBeCloseTo(0.033, 5);
+    expect(week.period.estimatedCostUsd.changePct).toBe(112);
+  });
+
+  it('derives the per-session shape of the range', async () => {
+    const week = await overview('7d');
+    expect(week.period.promptsPerSession).toBeCloseTo(13 / 3, 2);
+    expect(week.period.msPerSession).toBe(Math.round(week.period.activeMs.value / 3));
+    expect(week.period.projects).toBe(2);
+  });
+
+  it('names the busiest bucket in the range', async () => {
+    const week = await overview('7d');
+    expect(week.granularity).toBe('day');
+    expect(week.period.busiestBucket?.prompts).toBe(6);
+  });
+
+  it('counts models on the replies that carry them, from the event log', async () => {
+    const week = await overview('7d');
+    const byModel = Object.fromEntries(week.models.map((row) => [row.model, row.responses]));
+    // Prompts have no model in a transcript, so counting them would report nothing at all.
+    expect(byModel['claude-opus-4-8']).toBe(6 + 4);
+    expect(byModel['claude-sonnet-4-5']).toBe(3);
+    expect(week.models[0]?.share).toBeCloseTo(76.9, 1);
+  });
+
+  it('counts models the same way from the rollups', async () => {
+    const month = await overview('30d');
+    const byModel = Object.fromEntries(month.models.map((row) => [row.model, row.responses]));
+    expect(byModel['claude-opus-4-8']).toBe(6 + 4 + 5);
+    expect(byModel['claude-sonnet-4-5']).toBe(3);
+    expect(byModel['claude-haiku-4-5']).toBe(2);
+    expect(month.models.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(100, 1);
+  });
+});
+
 describe('aggregations', () => {
   it('attributes prompts to inferred projects', async () => {
     const body = await overview('all');
