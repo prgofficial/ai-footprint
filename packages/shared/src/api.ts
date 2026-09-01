@@ -341,18 +341,12 @@ export interface PromptThemesResponse {
   themes: Array<{ term: string; count: number }>;
 }
 
-export type InsightKind =
-  | 'category_shift'
-  | 'usage_trend'
-  | 'repeated_prompt'
-  | 'prompt_length'
-  | 'peak_hours'
-  | 'session_length'
-  | 'cache_efficiency'
-  | 'dominant_category'
-  | 'top_project'
-  | 'model_mix'
-  | 'technology_focus';
+/**
+ * Deliberately short. An observation earns a place here only if no other screen already shows
+ * it: rankings of category, project, model and technology all live on Overview, and the window
+ * you work in is drawn on Insights itself.
+ */
+export type InsightKind = 'category_shift' | 'usage_trend' | 'repeated_prompt' | 'prompt_length';
 
 export interface Insight {
   id: string;
@@ -366,7 +360,7 @@ export interface Insight {
   evidence: {
     value: number;
     /** How to render `value`; a bare number means nothing without its unit. */
-    unit: 'count' | 'percent' | 'points' | 'duration' | 'tokens';
+    unit: 'count' | 'words' | 'percent' | 'points' | 'duration' | 'tokens';
     /** The denominator, in words: "of 2,977 prompts". */
     of: string;
     sampleSize: number;

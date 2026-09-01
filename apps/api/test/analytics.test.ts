@@ -443,12 +443,23 @@ describe('insights', () => {
     const body = await insights();
     const scores = body.insights.map((insight) => insight.score);
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
-    // A leaderboard fact must never outrank something that describes a change.
-    const dominant = body.insights.findIndex((i) => i.kind === 'dominant_category');
-    const change = body.insights.findIndex((i) =>
-      ['category_shift', 'usage_trend', 'repeated_prompt'].includes(i.kind),
-    );
-    if (dominant >= 0 && change >= 0) expect(change).toBeLessThan(dominant);
+  });
+
+  it('never restates a ranking another screen already draws', async () => {
+    const body = await insights();
+    // Overview ranks categories, projects, models and technologies; the summary names the
+    // busiest of each in words; the rhythm charts draw the window you work in. An observation
+    // that repeated any of those was the whole reason this page read as filler.
+    const banned = [
+      'dominant_category',
+      'top_project',
+      'model_mix',
+      'technology_focus',
+      'peak_hours',
+      'session_length',
+      'cache_efficiency',
+    ];
+    for (const insight of body.insights) expect(banned).not.toContain(insight.kind);
   });
 
   it('sends the reader somewhere they can see it for themselves', async () => {
@@ -458,12 +469,12 @@ describe('insights', () => {
     for (const insight of linked) expect(insight.href).toMatch(/^\/[a-z]/);
   });
 
-  it('names the dominant category with the share the data actually shows', async () => {
+  it('quotes the prompt you keep sending, with the count that earned the remark', async () => {
     const body = await insights();
-    const dominant = body.insights.find((i) => i.kind === 'dominant_category');
-    expect(dominant?.headline).toContain('debugging');
-    expect(dominant?.evidence.unit).toBe('percent');
-    expect(dominant?.evidence.value).toBe(67);
+    const repeated = body.insights.find((i) => i.kind === 'repeated_prompt');
+    expect(repeated?.headline).toMatch(/same prompt \d+ times/);
+    expect(repeated?.evidence.unit).toBe('count');
+    expect(repeated?.evidence.value).toBeGreaterThanOrEqual(5);
   });
 
   it('states its conclusion in a sentence before any figure supports it', async () => {

@@ -22,6 +22,8 @@ import type { Insight, InsightsResponse } from '@ai-footprint/shared';
 function evidenceValue(insight: Insight): string {
   const { value, unit } = insight.evidence;
   switch (unit) {
+    case 'words':
+      return `${Math.round(value)} words`;
     case 'percent':
       return `${Math.round(value)}%`;
     case 'points':
@@ -193,14 +195,15 @@ function Rhythm({ rhythm }: { rhythm: InsightsResponse['rhythm'] }) {
 }
 
 function basisLine(basis: InsightsResponse['basis']): string {
-  const parts = [
+  const corpus = [
     `Read from ${formatExact(basis.prompts)} prompt${basis.prompts === 1 ? '' : 's'}`,
     basis.sessions > 0
-      ? `across ${formatExact(basis.sessions)} session${basis.sessions === 1 ? '' : 's'}`
-      : null,
-    basis.recordedSince ? `recorded since ${formatDate(basis.recordedSince)}` : null,
-  ].filter(Boolean);
-  return `${parts.join(', ')}.`;
+      ? ` across ${formatExact(basis.sessions)} session${basis.sessions === 1 ? '' : 's'}`
+      : '',
+  ].join('');
+  return basis.recordedSince
+    ? `${corpus}, recorded since ${formatDate(basis.recordedSince)}.`
+    : `${corpus}.`;
 }
 
 export function InsightsPage() {
@@ -253,16 +256,18 @@ export function InsightsPage() {
             </Card>
           ) : (
             <section>
-              <h2 className="mb-4 text-2xs font-medium tracking-[0.12em] text-subtle uppercase">
+              <h2 className="mb-4 max-w-5xl text-2xs font-medium tracking-[0.12em] text-subtle uppercase">
                 {formatExact(insights.length)} observation{insights.length === 1 ? '' : 's'}
               </h2>
-              <ol>
+              {/* A measure of text, not a container to fill: at 1440px the evidence figure had
+                  drifted a third of a screen from the sentence it belonged to. */}
+              <ol className="max-w-5xl">
                 {insights.map((insight, index) => (
                   <Observation key={insight.id} insight={insight} rank={index} />
                 ))}
               </ol>
               {data.suppressed > 0 ? (
-                <p className="mt-5 border-t border-line pt-3 text-2xs text-subtle">
+                <p className="mt-5 max-w-5xl border-t border-line pt-3 text-2xs text-subtle">
                   {data.suppressed} further observation{data.suppressed === 1 ? '' : 's'} met the
                   threshold to be computed but not the one to be stated, and{' '}
                   {data.suppressed === 1 ? 'was' : 'were'} withheld.
