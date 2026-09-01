@@ -378,29 +378,99 @@ describe('prompt explorer', () => {
 });
 
 describe('insights', () => {
-  it('produces only insights backed by a row count', async () => {
-    const body = await api.json<InsightsResponse>('/api/analytics/insights?range=all&timezone=UTC');
+  // Its own corpus under its own provider, because the observation floor is deliberately higher
+  // than the twenty prompts the rest of this file needs (four confident findings from thirty
+  // prompts is exactly the failure this page exists to avoid), and because filtering by provider
+  // keeps these events out of every other assertion in the file.
+  const PROVIDER = 'insight-fixture';
+
+  beforeAll(async () => {
+    const events: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < 60; i++) {
+      const at = new Date(ANCHOR - (i % 5) * DAY - i * 60_000).toISOString();
+      events.push({
+        providerId: PROVIDER,
+        externalId: `insight-p${i}`,
+        eventType: 'prompt',
+        timestamp: at,
+        sessionId: `insight-s${i % 6}`,
+        // Two thirds debugging, so the dominant category is unambiguous.
+        prompt: i % 3 === 0 ? 'write unit tests for the parser' : 'why does this crash on startup',
+        workingDirectory: '/tmp/af-test/insight',
+        tzOffsetMinutes: 0,
+      });
+      events.push({
+        providerId: PROVIDER,
+        externalId: `insight-r${i}`,
+        eventType: 'response',
+        timestamp: new Date(Date.parse(at) + 20_000).toISOString(),
+        sessionId: `insight-s${i % 6}`,
+        model: 'claude-opus-4-8',
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 900,
+        workingDirectory: '/tmp/af-test/insight',
+        tzOffsetMinutes: 0,
+      });
+    }
+    const response = await api.post(
+      '/api/ingest/events',
+      { providerId: PROVIDER, events },
+      { [INGEST_TOKEN_HEADER]: api.token },
+    );
+    expect(response.status).toBe(201);
+    await api.post('/api/enrichment/run');
+  }, 60_000);
+
+  const insights = () =>
+    api.json<InsightsResponse>(
+      `/api/analytics/insights?range=all&timezone=UTC&providerId=${PROVIDER}`,
+    );
+
+  it('states nothing without the count behind it', async () => {
+    const body = await insights();
     expect(body.insights.length).toBeGreaterThan(0);
     for (const insight of body.insights) {
       expect(insight.evidence.sampleSize).toBeGreaterThan(0);
       expect(insight.evidence.value).toBeGreaterThan(0);
+      expect(insight.evidence.of.length).toBeGreaterThan(0);
       expect(insight.headline.length).toBeGreaterThan(0);
     }
   });
 
-  it('names the dominant category with the share the data actually shows', async () => {
-    const body = await api.json<InsightsResponse>('/api/analytics/insights?range=all&timezone=UTC');
-    const dominant = body.insights.find((i) => i.kind === 'dominant_category');
-    expect(dominant?.headline).toContain('debugging');
-    expect(dominant?.evidence.value).toBe(11);
+  it('leads with the observation worth the most, not the first one computed', async () => {
+    const body = await insights();
+    const scores = body.insights.map((insight) => insight.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+    // A leaderboard fact must never outrank something that describes a change.
+    const dominant = body.insights.findIndex((i) => i.kind === 'dominant_category');
+    const change = body.insights.findIndex((i) =>
+      ['category_shift', 'usage_trend', 'repeated_prompt'].includes(i.kind),
+    );
+    if (dominant >= 0 && change >= 0) expect(change).toBeLessThan(dominant);
   });
 
-  it('suppresses everything when there is not enough data', async () => {
+  it('sends the reader somewhere they can see it for themselves', async () => {
+    const body = await insights();
+    const linked = body.insights.filter((insight) => insight.href);
+    expect(linked.length).toBeGreaterThan(0);
+    for (const insight of linked) expect(insight.href).toMatch(/^\/[a-z]/);
+  });
+
+  it('names the dominant category with the share the data actually shows', async () => {
+    const body = await insights();
+    const dominant = body.insights.find((i) => i.kind === 'dominant_category');
+    expect(dominant?.headline).toContain('debugging');
+    expect(dominant?.evidence.unit).toBe('percent');
+    expect(dominant?.evidence.value).toBe(67);
+  });
+
+  it('says nothing at all, and says why, when the sample is too small', async () => {
     const body = await api.json<InsightsResponse>(
       '/api/analytics/insights?range=today&timezone=UTC',
     );
     expect(body.insights).toEqual([]);
-    expect(body.suppressed).toBeGreaterThan(0);
+    expect(body.reason).toMatch(/not enough/i);
   });
 });
 
@@ -411,7 +481,9 @@ describe('profile', () => {
       mostActiveProject: { name: string } | null;
       mostUsedTool: { name: string } | null;
       hasEnoughData: boolean;
-    }>('/api/analytics/profile?range=all&timezone=UTC');
+      // Scoped to the seeded provider: the insights block above adds its own corpus, and a
+      // test that asserts exact totals has to say which corpus it means.
+    }>('/api/analytics/profile?range=all&timezone=UTC&providerId=claude-code');
     expect(profile.totalPrompts).toBe(TOTAL_PROMPTS);
     expect(profile.mostActiveProject?.name).toBe('alpha');
     expect(profile.mostUsedTool?.name).toBe('Claude Code');

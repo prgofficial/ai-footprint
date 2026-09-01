@@ -350,26 +350,46 @@ export interface PromptAnalyticsResponse {
   topTechnologies: Array<{ technology: string; prompts: number }>;
 }
 
+export type InsightKind =
+  | 'category_shift'
+  | 'usage_trend'
+  | 'repeated_prompt'
+  | 'prompt_length'
+  | 'peak_hours'
+  | 'session_length'
+  | 'cache_efficiency'
+  | 'dominant_category'
+  | 'top_project'
+  | 'model_mix'
+  | 'technology_focus';
+
 export interface Insight {
   id: string;
-  kind:
-    | 'dominant_category'
-    | 'top_project'
-    | 'peak_hours'
-    | 'usage_trend'
-    | 'model_mix'
-    | 'session_length'
-    | 'technology_focus'
-    | 'cache_efficiency';
+  kind: InsightKind;
   headline: string;
   detail: string;
-  evidence: { metric: string; value: number; sampleSize: number; comparedWith?: string };
+  /** Higher is more worth reading. The page leads with the highest and demotes the rest. */
+  score: number;
+  /** Where to go to see it for yourself. Null when nothing on another page shows it. */
+  href: string | null;
+  evidence: {
+    value: number;
+    /** How to render `value`; a bare number means nothing without its unit. */
+    unit: 'count' | 'percent' | 'points' | 'duration' | 'tokens';
+    /** The denominator, in words: "of 2,977 prompts". */
+    of: string;
+    sampleSize: number;
+    comparedWith?: string;
+  };
 }
 
 export interface InsightsResponse {
   range: ResolvedRange;
   insights: Insight[];
+  /** Observations that were computed and withheld for want of a large enough sample. */
   suppressed: number;
+  /** Why the page is empty, when it is. */
+  reason: string | null;
 }
 
 export interface ProfileResponse {

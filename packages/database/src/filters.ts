@@ -72,6 +72,21 @@ export function buildEventWhere(filters: EventFilters, alias = 'e'): WhereClause
   }
   if (filters.includeSubagents === false) {
     clauses.push(`${alias}.is_subagent = 0`);
+    // "What you asked" also excludes the wrappers Claude Code writes into the user channel on
+    // your behalf, resumed-session notices, IDE state, slash-command output, interruptions.
+    // Without this the product quotes its own machinery back at the reader as something they
+    // typed, which it was doing on the Insights page.
+    clauses.push(`NOT EXISTS (
+      SELECT 1 FROM prompts sp WHERE sp.event_id = ${alias}.id AND (
+        sp.preview LIKE '<task-notification%' OR
+        sp.preview LIKE '<system-reminder%' OR
+        sp.preview LIKE '<ide_%' OR
+        sp.preview LIKE '<command-%' OR
+        sp.preview LIKE '<local-command%' OR
+        sp.preview LIKE '[Request interrupted%' OR
+        sp.preview LIKE 'Caveat: The messages below were generated%' OR
+        sp.preview LIKE 'This session is being continued from a previous%'
+      ))`);
   }
   if (filters.category) {
     clauses.push(

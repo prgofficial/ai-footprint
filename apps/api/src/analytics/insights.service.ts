@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { ACTIVE_TIME_TAIL_ALLOWANCE_MS } from '@ai-footprint/shared';
 import type { Insight, InsightsResponse, RangeQuery } from '@ai-footprint/shared';
 import { StoreService } from '../common';
 import { AnalyticsService, peakWindow } from './analytics.service';
 import { changePct } from './range';
 
-const MIN_PROMPTS = 15;
+/** Below this, any observation is an anecdote. Four confident findings from thirty prompts is
+ *  exactly the failure this page is supposed to avoid. */
+const MIN_PROMPTS = 40;
 const MIN_CATEGORY_SHARE = 20;
 const MIN_TREND_CHANGE = 15;
+/** A share that moved by less than this is noise, not a change worth a sentence. */
+const MIN_SHIFT_POINTS = 8;
 
 function hourLabel(hour: number): string {
   const normalized = ((hour % 24) + 24) % 24;
@@ -15,10 +20,18 @@ function hourLabel(hour: number): string {
   return `${display} ${suffix}`;
 }
 
+function plural(count: number, word: string): string {
+  return `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+}
+
 /**
- * Brief §28: insights must come only from real data. Every card carries the count behind
- * it, and anything that fails a minimum-sample guard is suppressed rather than softened,
- * there is no code path that can produce a sentence without a row count.
+ * Brief §28: insights come only from real data. Every observation carries the count behind it,
+ * and anything failing a minimum-sample guard is withheld rather than softened.
+ *
+ * The page is also required to be worth reading. Overview already ranks categories, projects,
+ * models and technologies with bars and deltas, so restating those as sentences taught nobody
+ * anything, this scores observations and leads with the one that says the most, preferring
+ * CHANGE (a share that moved, a prompt sent sixty times) over leaderboards.
  */
 @Injectable()
 export class InsightsService {
@@ -29,16 +42,199 @@ export class InsightsService {
 
   generate(query: RangeQuery): InsightsResponse {
     const store = this.stores.store;
-    const { range, filters, previous } = this.analytics.scope(query);
-    const totals = store.analytics.totals(filters);
+    const scope = this.analytics.scope(query);
+    const { range, filters, previous } = scope;
+    const totals = store.analytics.totals(
+      filters,
+      scope.idleTimeoutMs,
+      ACTIVE_TIME_TAIL_ALLOWANCE_MS,
+    );
     const insights: Insight[] = [];
     let suppressed = 0;
 
     if (totals.prompts < MIN_PROMPTS) {
-      return { range, insights: [], suppressed: 1 };
+      return {
+        range,
+        insights: [],
+        suppressed: 0,
+        reason: `Not enough to go on yet — ${plural(totals.prompts, 'prompt')} in this selection, and an observation needs at least ${MIN_PROMPTS} before it means anything.`,
+      };
     }
 
+    const link = (path: string): string =>
+      `${path}${path.includes('?') ? '&' : '?'}range=${range.preset}`;
     const categories = store.analytics.byCategory(filters);
+    const priorCategories = store.analytics.byCategory(previous);
+    const priorTotal = priorCategories.reduce((sum, row) => sum + row.count, 0);
+
+    // ---- change, which is the only thing this page can say that Overview cannot ----
+
+    if (priorTotal > 0) {
+      const priorByKey = new Map(priorCategories.map((row) => [row.key, row.count]));
+      let biggest: { key: string; now: number; before: number; shift: number } | null = null;
+      for (const row of categories) {
+        if (row.key === 'Other') continue;
+        const now = (row.count / totals.prompts) * 100;
+        const before = ((priorByKey.get(row.key) ?? 0) / priorTotal) * 100;
+        const shift = now - before;
+        if (!biggest || Math.abs(shift) > Math.abs(biggest.shift)) {
+          biggest = { key: row.key, now, before, shift };
+        }
+      }
+      if (biggest && Math.abs(biggest.shift) >= MIN_SHIFT_POINTS) {
+        const direction = biggest.shift > 0 ? 'grew' : 'shrank';
+        insights.push({
+          id: 'category_shift',
+          kind: 'category_shift',
+          headline: `${biggest.key} ${direction} from ${Math.round(biggest.before)}% to ${Math.round(biggest.now)}% of what you brought to AI.`,
+          detail: `A ${Math.abs(Math.round(biggest.shift))}-point move against the period before this one. Nothing else on any screen shows this.`,
+          score: 100 + Math.abs(biggest.shift),
+          href: link(`/prompts?category=${encodeURIComponent(biggest.key)}`),
+          evidence: {
+            value: Math.round(Math.abs(biggest.shift)),
+            unit: 'points',
+            of: `${plural(totals.prompts, 'prompt')} against ${plural(priorTotal, 'prompt')} before`,
+            sampleSize: totals.prompts + priorTotal,
+            comparedWith: 'the previous period',
+          },
+        });
+      } else if (biggest) {
+        suppressed += 1;
+      }
+    }
+
+    const change = changePct(totals.prompts, priorTotal);
+    if (change !== null && Math.abs(change) >= MIN_TREND_CHANGE) {
+      const direction = change > 0 ? 'rose' : 'fell';
+      insights.push({
+        id: 'usage_trend',
+        kind: 'usage_trend',
+        headline: `Your AI usage ${direction} ${Math.abs(Math.round(change))}% against the period before.`,
+        detail: `${plural(totals.prompts, 'prompt')} this period against ${plural(priorTotal, 'prompt')} before it.`,
+        score: 90 + Math.min(Math.abs(change), 50),
+        href: link('/activity'),
+        evidence: {
+          value: Math.round(Math.abs(change)),
+          unit: 'percent',
+          of: `${plural(totals.prompts, 'prompt')} against ${plural(priorTotal, 'prompt')}`,
+          sampleSize: totals.prompts,
+          comparedWith: 'the previous period',
+        },
+      });
+    } else if (change !== null) {
+      suppressed += 1;
+    }
+
+    const repeated = store.prompts.repeated({ ...filters, includeSubagents: false }, 1)[0];
+    // Metadata-only mode stores no text, so there is nothing to quote and nothing to say.
+    if (repeated && repeated.count >= 5 && repeated.text) {
+      insights.push({
+        id: 'repeated_prompt',
+        kind: 'repeated_prompt',
+        headline: `You sent essentially the same prompt ${repeated.count} times.`,
+        detail: `"${repeated.text.slice(0, 120)}${repeated.text.length > 120 ? '…' : ''}" — something worth a snippet, a script, or a command.`,
+        score: 80 + Math.min(repeated.count, 40),
+        href: link('/prompts/analytics'),
+        evidence: {
+          value: repeated.count,
+          unit: 'count',
+          of: plural(totals.prompts, 'prompt'),
+          sampleSize: totals.prompts,
+        },
+      });
+    }
+
+    const lengths = store.prompts.lengthStats(filters);
+    if (lengths.total >= MIN_PROMPTS && lengths.avgWords > 0) {
+      insights.push({
+        id: 'prompt_length',
+        kind: 'prompt_length',
+        headline: `Your average prompt runs to ${Math.round(lengths.avgWords)} words.`,
+        detail:
+          lengths.avgWords > 120
+            ? 'Long prompts carry more context, and cost more to send every turn.'
+            : 'Short prompts lean on the conversation that came before them.',
+        score: 50,
+        href: link('/prompts/analytics'),
+        evidence: {
+          value: Math.round(lengths.avgWords),
+          unit: 'count',
+          of: `words across ${plural(lengths.total, 'prompt')}`,
+          sampleSize: lengths.total,
+        },
+      });
+    }
+
+    // ---- rhythm and cost, which Overview shows only as single figures ----
+
+    const peak = peakWindow(store.analytics.activeHours(filters));
+    if (peak && peak.prompts / totals.prompts >= 0.2) {
+      const share = Math.round((peak.prompts / totals.prompts) * 100);
+      insights.push({
+        id: 'peak_hours',
+        kind: 'peak_hours',
+        headline: `${share}% of your prompts fall between ${hourLabel(peak.fromHour)} and ${hourLabel(peak.toHour)}.`,
+        detail: 'A three-hour window carrying a disproportionate share of the work.',
+        score: 60 + share,
+        href: link('/activity'),
+        evidence: {
+          value: share,
+          unit: 'percent',
+          of: plural(totals.prompts, 'prompt'),
+          sampleSize: totals.prompts,
+        },
+      });
+    } else if (peak) {
+      suppressed += 1;
+    }
+
+    if (totals.sessions > 0) {
+      const minutes = Math.round(totals.activeMs / totals.sessions / 60_000);
+      if (minutes > 0) {
+        insights.push({
+          id: 'session_length',
+          kind: 'session_length',
+          headline: `A session runs about ${formatMinutes(minutes)} of active time.`,
+          detail: 'Idle gaps are excluded, so this is time worked rather than time elapsed.',
+          score: 40,
+          href: link('/sessions'),
+          evidence: {
+            value: totals.activeMs / totals.sessions,
+            unit: 'duration',
+            of: plural(totals.sessions, 'session'),
+            sampleSize: totals.sessions,
+          },
+        });
+      }
+    }
+
+    // Computed exactly as the Overview tile computes it, including cache writes. Leaving them
+    // out gave the two screens different percentages for the same range.
+    const inbound = totals.inputTokens + totals.cacheReadTokens + totals.cacheWriteTokens;
+    if (inbound > 0) {
+      const ratio = Math.round((totals.cacheReadTokens / inbound) * 100);
+      if (ratio >= 40) {
+        insights.push({
+          id: 'cache_efficiency',
+          kind: 'cache_efficiency',
+          headline: `${ratio}% of the context you send is re-read from cache.`,
+          detail:
+            'Cached reads bill at a tenth of fresh input, so a long conversation costs far less than its token count suggests.',
+          score: 45,
+          href: null,
+          evidence: {
+            value: ratio,
+            unit: 'percent',
+            of: `${inbound.toLocaleString()} incoming tokens`,
+            sampleSize: inbound,
+          },
+        });
+      }
+    }
+
+    // ---- the leaderboards, kept but scored below everything above, since Overview ranks
+    //      all of them with bars, counts and deltas ----
+
     const top = categories[0];
     if (top && top.key !== 'Other') {
       const pct = Math.round((top.count / totals.prompts) * 100);
@@ -46,136 +242,88 @@ export class InsightsService {
         insights.push({
           id: 'dominant_category',
           kind: 'dominant_category',
-          headline: `You used AI mostly for ${top.key.toLowerCase()} in this period.`,
-          detail: `${top.key} represented ${pct}% of your ${totals.prompts} prompts.`,
-          evidence: { metric: 'prompts_in_category', value: top.count, sampleSize: totals.prompts },
+          headline: `You used AI mostly for ${top.key.toLowerCase()}.`,
+          detail: `${pct}% of your prompts in this period.`,
+          score: 20 + pct / 10,
+          href: link(`/prompts?category=${encodeURIComponent(top.key)}`),
+          evidence: {
+            value: pct,
+            unit: 'percent',
+            of: plural(totals.prompts, 'prompt'),
+            sampleSize: totals.prompts,
+          },
         });
       } else {
         suppressed += 1;
       }
     }
 
-    const projects = store.analytics.byProject(filters, 2);
-    const topProject = projects[0];
-    if (topProject && topProject.count >= MIN_PROMPTS / 3) {
+    const topProject = store.analytics.byProject(filters, 1)[0];
+    if (topProject && topProject.count > 0) {
       const pct = Math.round((topProject.count / totals.prompts) * 100);
       insights.push({
         id: 'top_project',
         kind: 'top_project',
-        headline: `${topProject.name} was your most active AI project.`,
-        detail: `${topProject.count} prompts — ${pct}% of everything in this period.`,
+        headline: `${topProject.name} took ${pct}% of your prompts.`,
+        detail: `${plural(topProject.count, 'prompt')} out of ${totals.prompts.toLocaleString()}.`,
+        score: 15 + pct / 10,
+        href: link(`/prompts?projectId=${encodeURIComponent(topProject.key)}`),
         evidence: {
-          metric: 'prompts_in_project',
-          value: topProject.count,
+          value: pct,
+          unit: 'percent',
+          of: plural(totals.prompts, 'prompt'),
           sampleSize: totals.prompts,
         },
       });
-    } else if (topProject) {
-      suppressed += 1;
     }
 
-    const peak = peakWindow(store.analytics.activeHours(filters));
-    if (peak && peak.prompts >= totals.prompts * 0.25) {
+    const models = store.analytics.byModel(filters).filter((row) => !row.model.startsWith('<'));
+    const replies = models.reduce((sum, row) => sum + row.responses, 0);
+    const first = models[0];
+    if (first && replies > 0 && models.length > 1) {
+      const pct = Math.round((first.responses / replies) * 100);
       insights.push({
-        id: 'peak_hours',
-        kind: 'peak_hours',
-        headline: `Your most active AI period is ${hourLabel(peak.fromHour)}–${hourLabel(peak.toHour)}.`,
-        detail: `${peak.prompts} of ${totals.prompts} prompts fell in that window.`,
-        evidence: { metric: 'prompts_in_window', value: peak.prompts, sampleSize: totals.prompts },
-      });
-    } else if (peak) {
-      suppressed += 1;
-    }
-
-    const prior = store.analytics.totals(previous);
-    const change = changePct(totals.prompts, prior.prompts);
-    if (change !== null && prior.prompts >= MIN_PROMPTS && Math.abs(change) >= MIN_TREND_CHANGE) {
-      const direction = change > 0 ? 'increased' : 'decreased';
-      insights.push({
-        id: 'usage_trend',
-        kind: 'usage_trend',
-        headline: `Your AI usage ${direction} ${Math.abs(Math.round(change))}% compared with the previous period.`,
-        detail: `${totals.prompts} prompts this period against ${prior.prompts} in the one before.`,
+        id: 'model_mix',
+        kind: 'model_mix',
+        headline: `${first.model} answered ${pct}% of your turns.`,
+        detail: `${models.length} models in use across this period.`,
+        score: 12,
+        href: link(`/activity?model=${encodeURIComponent(first.model)}`),
         evidence: {
-          metric: 'prompts',
-          value: totals.prompts,
-          sampleSize: totals.prompts + prior.prompts,
-          comparedWith: 'previous_period',
+          value: pct,
+          unit: 'percent',
+          of: plural(replies, 'reply'),
+          sampleSize: replies,
         },
       });
-    } else if (prior.prompts > 0) {
-      suppressed += 1;
     }
 
-    const models = store.analytics.byModel(filters);
-    if (models.length >= 2) {
-      const [first, second] = models;
-      if (first && second) {
-        const totalEvents = models.reduce((sum, row) => sum + row.events, 0);
-        const pct = Math.round((first.events / totalEvents) * 100);
-        insights.push({
-          id: 'model_mix',
-          kind: 'model_mix',
-          headline: `${first.model} handled ${pct}% of your AI turns.`,
-          detail: `You also used ${second.model} for ${Math.round((second.events / totalEvents) * 100)}% of them.`,
-          evidence: { metric: 'events_per_model', value: first.events, sampleSize: totalEvents },
-        });
-      }
-    }
-
-    if (totals.sessions >= 5) {
-      const average = Math.round(totals.activeMs / totals.sessions / 60_000);
-      if (average > 0) {
-        insights.push({
-          id: 'session_length',
-          kind: 'session_length',
-          headline: `Your average AI session is about ${average} minute${average === 1 ? '' : 's'} of active time.`,
-          detail: `Measured across ${totals.sessions} sessions, excluding idle gaps longer than the configured timeout.`,
-          evidence: {
-            metric: 'active_ms_per_session',
-            value: average,
-            sampleSize: totals.sessions,
-          },
-        });
-      }
-    }
-
-    const technologies = store.analytics.byTechnology(filters, 1);
-    const topTech = technologies[0];
-    if (topTech && topTech.count >= MIN_PROMPTS / 3) {
+    const topTech = store.analytics.byTechnology(filters, 1)[0];
+    if (topTech && topTech.count > 0) {
       insights.push({
         id: 'technology_focus',
         kind: 'technology_focus',
         headline: `${topTech.key} was the technology you discussed most.`,
-        detail: `Mentioned in ${topTech.count} prompts across this period.`,
+        detail: `Mentioned in ${plural(topTech.count, 'prompt')}.`,
+        score: 10,
+        href: link(`/prompts?technology=${encodeURIComponent(topTech.key)}`),
         evidence: {
-          metric: 'prompts_with_technology',
           value: topTech.count,
+          unit: 'count',
+          of: plural(totals.prompts, 'prompt'),
           sampleSize: totals.prompts,
         },
       });
     }
 
-    if (totals.cacheReadTokens > 0 && totals.inputTokens > 0) {
-      const ratio = Math.round(
-        (totals.cacheReadTokens / (totals.cacheReadTokens + totals.inputTokens)) * 100,
-      );
-      if (ratio >= 40) {
-        insights.push({
-          id: 'cache_efficiency',
-          kind: 'cache_efficiency',
-          headline: `${ratio}% of your input came from cached context.`,
-          detail:
-            'Cached reads are billed at a fraction of fresh input, so long sessions cost less than they look.',
-          evidence: {
-            metric: 'cache_read_ratio',
-            value: ratio,
-            sampleSize: totals.cacheReadTokens + totals.inputTokens,
-          },
-        });
-      }
-    }
-
-    return { range, insights, suppressed };
+    insights.sort((a, b) => b.score - a.score);
+    return { range, insights, suppressed, reason: null };
   }
+}
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
