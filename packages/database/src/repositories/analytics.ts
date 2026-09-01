@@ -313,22 +313,6 @@ export class AnalyticsRepository {
     return filled;
   }
 
-  categoryTrend(
-    filters: EventFilters,
-    granularity: 'day' | 'week',
-  ): Array<{ bucket: string; category: string; count: number }> {
-    const where = buildEventWhere({ ...filters, eventType: 'prompt' });
-    const bucketExpr = granularity === 'week' ? "strftime('%Y-W%W', e.local_date)" : 'e.local_date';
-    return this.connection
-      .prepare(
-        `SELECT ${bucketExpr} AS bucket, COALESCE(c.category, 'Other') AS category, COUNT(*) AS count
-         FROM events e LEFT JOIN classifications c ON c.event_id = e.id
-         WHERE ${where.sql}
-         GROUP BY bucket, category ORDER BY bucket`,
-      )
-      .all(...where.params) as Array<{ bucket: string; category: string; count: number }>;
-  }
-
   activity(
     filters: EventFilters,
     options: { limit: number; cursor?: string },
@@ -563,7 +547,7 @@ export class AnalyticsRepository {
     return out;
   }
 
-  /** Earliest event inside the given slice, so the Profile page answers about that slice. */
+  /** Earliest event inside the given slice, so a reading says how far back it reaches. */
   firstEventAt(filters: EventFilters): string | null {
     const where = buildEventWhere(filters);
     const row = this.connection

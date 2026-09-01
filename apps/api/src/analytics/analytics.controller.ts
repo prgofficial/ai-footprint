@@ -65,9 +65,9 @@ export class AnalyticsController {
     return this.analytics.prompts(query);
   }
 
-  @Get('prompts/analytics')
-  promptAnalytics(@Query(zodPipe(rangeQuerySchema)) query: RangeQuery) {
-    return this.analytics.promptAnalytics(query);
+  @Get('prompts/themes')
+  promptThemes(@Query(zodPipe(rangeQuerySchema)) query: RangeQuery) {
+    return this.analytics.promptThemes(query);
   }
 
   @Get('prompts/:id')
@@ -88,10 +88,5 @@ export class AnalyticsController {
   @Get('insights')
   insightsList(@Query(zodPipe(rangeQuerySchema)) query: RangeQuery) {
     return this.insights.generate(query);
-  }
-
-  @Get('profile')
-  profile(@Query(zodPipe(rangeQuerySchema)) query: RangeQuery) {
-    return this.analytics.profile(query);
   }
 }

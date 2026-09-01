@@ -32,6 +32,10 @@ function plural(count: number, word: string): string {
  * models and technologies with bars and deltas, so restating those as sentences taught nobody
  * anything, this scores observations and leads with the one that says the most, preferring
  * CHANGE (a share that moved, a prompt sent sixty times) over leaderboards.
+ *
+ * It is the only reading of your habits in the product. A separate profile page said the same
+ * things in a second layout, the same category ranking, the same busiest project, so its one
+ * genuine contribution, the sentence naming what the period was about, moved here instead.
  */
 @Injectable()
 export class InsightsService {
@@ -52,9 +56,24 @@ export class InsightsService {
     const insights: Insight[] = [];
     let suppressed = 0;
 
+    const hours = store.analytics.activeHours(filters);
+    const rhythm = {
+      hours,
+      weekdays: store.analytics.activeWeekdays(filters),
+      peak: peakWindow(hours),
+    };
+    const basis = {
+      prompts: totals.prompts,
+      sessions: totals.sessions,
+      recordedSince: store.analytics.firstEventAt(filters),
+    };
+
     if (totals.prompts < MIN_PROMPTS) {
       return {
         range,
+        summary: null,
+        basis,
+        rhythm,
         insights: [],
         suppressed: 0,
         reason: `Not enough to go on yet — ${plural(totals.prompts, 'prompt')} in this selection, and an observation needs at least ${MIN_PROMPTS} before it means anything.`,
@@ -134,7 +153,7 @@ export class InsightsService {
         headline: `You sent essentially the same prompt ${repeated.count} times.`,
         detail: `"${repeated.text.slice(0, 120)}${repeated.text.length > 120 ? '…' : ''}" — something worth a snippet, a script, or a command.`,
         score: 80 + Math.min(repeated.count, 40),
-        href: link('/prompts/analytics'),
+        href: link(`/prompts?q=${encodeURIComponent(repeated.text.slice(0, 40))}`),
         evidence: {
           value: repeated.count,
           unit: 'count',
@@ -155,7 +174,7 @@ export class InsightsService {
             ? 'Long prompts carry more context, and cost more to send every turn.'
             : 'Short prompts lean on the conversation that came before them.',
         score: 50,
-        href: link('/prompts/analytics'),
+        href: link('/prompts'),
         evidence: {
           value: Math.round(lengths.avgWords),
           unit: 'count',
@@ -167,7 +186,7 @@ export class InsightsService {
 
     // ---- rhythm and cost, which Overview shows only as single figures ----
 
-    const peak = peakWindow(store.analytics.activeHours(filters));
+    const peak = rhythm.peak;
     if (peak && peak.prompts / totals.prompts >= 0.2) {
       const share = Math.round((peak.prompts / totals.prompts) * 100);
       insights.push({
@@ -317,7 +336,22 @@ export class InsightsService {
     }
 
     insights.sort((a, b) => b.score - a.score);
-    return { range, insights, suppressed, reason: null };
+    const topProviderRows = store.analytics.byProvider(filters);
+    return {
+      range,
+      summary: summarise({
+        categories: categories.filter((row) => row.key !== 'Other'),
+        prompts: totals.prompts,
+        providers: topProviderRows,
+        project: topProject ?? null,
+        peak,
+      }),
+      basis,
+      rhythm,
+      insights,
+      suppressed,
+      reason: null,
+    };
   }
 }
 
@@ -326,4 +360,41 @@ function formatMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
+/**
+ * One sentence naming what the period was about, assembled from the same counts the page shows
+ * beneath it. A reading should state its conclusion before its working. Six floating
+ * percentages left the reader to draw the conclusion themselves.
+ */
+function summarise(input: {
+  categories: Array<{ key: string; count: number }>;
+  prompts: number;
+  providers: Array<{ key: string; name: string; count: number }>;
+  project: { name: string; count: number } | null;
+  peak: { fromHour: number; toHour: number; prompts: number } | null;
+}): string | null {
+  if (input.prompts === 0) return null;
+
+  const top = input.categories.slice(0, 2);
+  const areas =
+    top.length === 0
+      ? 'across a mix of work'
+      : top.length === 1
+        ? `mostly on ${top[0]!.key.toLowerCase()}`
+        : `mostly on ${top[0]!.key.toLowerCase()} and ${top[1]!.key.toLowerCase()}`;
+
+  const providerTotal = input.providers.reduce((sum, row) => sum + row.count, 0);
+  const provider = input.providers[0];
+  const tool =
+    provider && providerTotal > 0
+      ? `${provider.count / providerTotal >= 0.9 ? 'almost entirely in' : 'mainly in'} ${provider.name}`
+      : null;
+
+  const project = input.project ? `mostly in ${input.project.name}` : null;
+  const when = input.peak
+    ? `and most of it between ${hourLabel(input.peak.fromHour)} and ${hourLabel(input.peak.toHour)}`
+    : null;
+
+  return `${[`You used AI ${areas}`, tool, project, when].filter(Boolean).join(', ')}.`;
 }

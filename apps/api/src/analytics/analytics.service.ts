@@ -14,9 +14,8 @@ import type {
   OverviewResponse,
   PlanSummary,
   Paginated,
-  ProfileResponse,
   ProjectUsage,
-  PromptAnalyticsResponse,
+  PromptThemesResponse,
   PromptCategory,
   PromptDetail,
   PromptListItem,
@@ -525,46 +524,15 @@ export class AnalyticsService {
     };
   }
 
-  promptAnalytics(query: RangeQuery): PromptAnalyticsResponse {
-    const store = this.stores.store;
+  /**
+   * Terms you use often, so the prompt list can offer them as searches. Deliberately not a
+   * page: a bare word cloud restated what the technology ranking already says better.
+   */
+  promptThemes(query: RangeQuery): PromptThemesResponse {
     const { range, filters } = this.scope(query);
-    const totals = store.analytics.totals(filters);
-    const lengths = store.prompts.lengthStats(filters);
-    const granularity = granularityFor(range) === 'week' ? 'week' : 'day';
-    const trendRows = store.analytics.categoryTrend(filters, granularity);
-
-    const trends = new Map<string, Record<string, number>>();
-    for (const row of trendRows) {
-      const bucket = trends.get(row.bucket) ?? {};
-      bucket[row.category] = row.count;
-      trends.set(row.bucket, bucket);
-    }
-
     return {
       range,
-      categories: this.categories(query),
-      themes: extractThemes(store.prompts.textsForThemes(filters, 2000)),
-      avgCharLength: Math.round(lengths.avgChars),
-      avgWordLength: Math.round(lengths.avgWords),
-      promptsPerSession:
-        totals.sessions > 0 ? Math.round((totals.prompts / totals.sessions) * 10) / 10 : 0,
-      repeated: store.prompts.repeated(filters, 12).map((row) => ({
-        fingerprint: row.fingerprint,
-        text: row.text ?? '',
-        count: row.count,
-        lastSeenAt: row.lastSeenAt,
-      })),
-      trends: [...trends.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([bucket, counts]) => ({ bucket, counts })),
-      activeHours: store.analytics.activeHours(filters),
-      activeDays: store.analytics.activeWeekdays(filters),
-      topProjects: store.analytics
-        .byProject(filters, 8)
-        .map((row) => ({ projectId: row.key, name: row.name, prompts: row.count })),
-      topTechnologies: store.analytics
-        .byTechnology(filters, 12)
-        .map((row) => ({ technology: row.key, prompts: row.count })),
+      themes: extractThemes(this.stores.store.prompts.textsForThemes(filters, 2000)),
     };
   }
 
@@ -676,47 +644,6 @@ export class AnalyticsService {
         category: row.category as PromptCategory | null,
         isSubagent: row.isSubagent === 1,
       })),
-    };
-  }
-
-  profile(query: RangeQuery): ProfileResponse {
-    const store = this.stores.store;
-    const { range, filters } = this.scope(query);
-    const totals = store.analytics.totals(filters);
-    const categories = store.analytics.byCategory(filters);
-    const providers = store.analytics.byProvider(filters);
-    const projects = store.analytics.byProject(filters, 1);
-    const hours = store.analytics.activeHours(filters);
-
-    const providerTotal = providers.reduce((sum, row) => sum + row.count, 0);
-    const topProvider = providers[0];
-    const topProject = projects[0];
-    const peak = peakWindow(hours);
-
-    return {
-      range,
-      distribution: categories.map((row) => ({
-        category: row.key as PromptCategory,
-        share: share(row.count, totals.prompts),
-        prompts: row.count,
-      })),
-      mostUsedTool: topProvider
-        ? {
-            providerId: topProvider.key,
-            name: topProvider.name,
-            share: share(topProvider.count, providerTotal),
-          }
-        : null,
-      mostActiveProject: topProject
-        ? { projectId: topProject.key, name: topProject.name, prompts: topProject.count }
-        : null,
-      mostActivePeriod: peak,
-      averageSessionMs: totals.sessions > 0 ? Math.round(totals.activeMs / totals.sessions) : 0,
-      totalPrompts: totals.prompts,
-      totalSessions: totals.sessions,
-      // Within the selected range and provider, like every other figure on this page.
-      firstActivityAt: store.analytics.firstEventAt(filters),
-      hasEnoughData: totals.prompts >= 10,
     };
   }
 }

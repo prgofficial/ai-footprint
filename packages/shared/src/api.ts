@@ -335,19 +335,10 @@ export interface PromptDetail extends PromptListItem {
   cacheWriteTokens: number | null;
 }
 
-export interface PromptAnalyticsResponse {
+/** Your own recurring vocabulary, offered as one-click searches beside the prompt list. */
+export interface PromptThemesResponse {
   range: ResolvedRange;
-  categories: CategoryUsage[];
   themes: Array<{ term: string; count: number }>;
-  avgCharLength: number;
-  avgWordLength: number;
-  promptsPerSession: number;
-  repeated: Array<{ fingerprint: string; text: string; count: number; lastSeenAt: string }>;
-  trends: Array<{ bucket: string; counts: Record<string, number> }>;
-  activeHours: Array<{ hour: number; prompts: number }>;
-  activeDays: Array<{ weekday: number; prompts: number }>;
-  topProjects: Array<{ projectId: string; name: string; prompts: number }>;
-  topTechnologies: Array<{ technology: string; prompts: number }>;
 }
 
 export type InsightKind =
@@ -385,24 +376,21 @@ export interface Insight {
 
 export interface InsightsResponse {
   range: ResolvedRange;
+  /** What this period was mostly about, in one sentence. Null below the sample floor. */
+  summary: string | null;
+  /** What the reading rests on, so the reader can weigh it. */
+  basis: { prompts: number; sessions: number; recordedSince: string | null };
+  /** When the work happened. No other screen answers this. */
+  rhythm: {
+    hours: Array<{ hour: number; prompts: number }>;
+    weekdays: Array<{ weekday: number; prompts: number }>;
+    peak: { fromHour: number; toHour: number; prompts: number } | null;
+  };
   insights: Insight[];
   /** Observations that were computed and withheld for want of a large enough sample. */
   suppressed: number;
   /** Why the page is empty, when it is. */
   reason: string | null;
-}
-
-export interface ProfileResponse {
-  range: ResolvedRange;
-  distribution: Array<{ category: PromptCategory; share: number; prompts: number }>;
-  mostUsedTool: { providerId: string; name: string; share: number } | null;
-  mostActiveProject: { projectId: string; name: string; prompts: number } | null;
-  mostActivePeriod: { fromHour: number; toHour: number; prompts: number } | null;
-  averageSessionMs: number;
-  totalPrompts: number;
-  totalSessions: number;
-  firstActivityAt: string | null;
-  hasEnoughData: boolean;
 }
 
 export interface SettingsResponse {

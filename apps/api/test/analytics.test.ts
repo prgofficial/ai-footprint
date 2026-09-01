@@ -369,11 +369,12 @@ describe('prompt explorer', () => {
     expect(detail.technologies).toContain('Docker');
   });
 
-  it('reports repeated prompts by normalised fingerprint', async () => {
-    const body = await api.json<{ repeated: Array<{ count: number }> }>(
-      '/api/analytics/prompts/analytics?range=all&timezone=UTC',
+  it('surfaces the terms you write about, for the search box to offer', async () => {
+    const body = await api.json<{ themes: Array<{ term: string; count: number }> }>(
+      '/api/analytics/prompts/themes?range=all&timezone=UTC',
     );
-    expect(body.repeated[0]?.count).toBe(6);
+    expect(body.themes.length).toBeGreaterThan(0);
+    expect(body.themes.every((theme) => theme.count > 0)).toBe(true);
   });
 });
 
@@ -465,28 +466,32 @@ describe('insights', () => {
     expect(dominant?.evidence.value).toBe(67);
   });
 
+  it('states its conclusion in a sentence before any figure supports it', async () => {
+    const body = await insights();
+    expect(body.summary).toMatch(/^You used AI mostly on debugging/);
+    expect(body.summary).toContain('Insight Fixture');
+    expect(body.basis.prompts).toBe(60);
+    expect(body.basis.sessions).toBe(6);
+    expect(body.basis.recordedSince).not.toBeNull();
+  });
+
+  it('answers when the work happened, which no other endpoint does', async () => {
+    const body = await insights();
+    expect(body.rhythm.hours).toHaveLength(24);
+    expect(body.rhythm.weekdays).toHaveLength(7);
+    const counted = body.rhythm.hours.reduce((sum, entry) => sum + entry.prompts, 0);
+    expect(counted).toBe(60);
+    expect(body.rhythm.peak).not.toBeNull();
+  });
+
   it('says nothing at all, and says why, when the sample is too small', async () => {
     const body = await api.json<InsightsResponse>(
       '/api/analytics/insights?range=today&timezone=UTC',
     );
     expect(body.insights).toEqual([]);
+    expect(body.summary).toBeNull();
+    // Silence still has to say what it rests on, or the page cannot explain itself.
+    expect(body.basis.prompts).toBeLessThan(40);
     expect(body.reason).toMatch(/not enough/i);
-  });
-});
-
-describe('profile', () => {
-  it('summarises the footprint from real counts', async () => {
-    const profile = await api.json<{
-      totalPrompts: number;
-      mostActiveProject: { name: string } | null;
-      mostUsedTool: { name: string } | null;
-      hasEnoughData: boolean;
-      // Scoped to the seeded provider: the insights block above adds its own corpus, and a
-      // test that asserts exact totals has to say which corpus it means.
-    }>('/api/analytics/profile?range=all&timezone=UTC&providerId=claude-code');
-    expect(profile.totalPrompts).toBe(TOTAL_PROMPTS);
-    expect(profile.mostActiveProject?.name).toBe('alpha');
-    expect(profile.mostUsedTool?.name).toBe('Claude Code');
-    expect(profile.hasEnoughData).toBe(true);
   });
 });
