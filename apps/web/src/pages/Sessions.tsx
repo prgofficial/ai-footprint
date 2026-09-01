@@ -1,23 +1,12 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Radio, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { FilterBar } from '@/components/layout/filter-bar';
 import { PageHeader } from '@/components/layout/page';
-import {
-  Badge,
-  Bar,
-  Button,
-  Card,
-  CardHeader,
-  Kpi,
-  Mono,
-  Stat,
-  StatGrid,
-} from '@/components/ui/primitives';
+import { Badge, Button, Card, Mono } from '@/components/ui/primitives';
 import { EmptyState, ErrorState, SkeletonRows } from '@/components/ui/states';
 import { useFilters } from '@/hooks/useFilters';
 import { useSessionDetail, useSessions } from '@/lib/queries';
 import {
-  chartColor,
   cn,
   formatCost,
   formatDate,
@@ -28,29 +17,36 @@ import {
   formatRelative,
   formatTime,
 } from '@/lib/utils';
-import type { LiveSessionInfo } from '@ai-footprint/shared';
+import type { LiveSessionInfo, SessionSummary } from '@ai-footprint/shared';
 
 /**
  * A session that is running at this moment. Claude Code keeps a file per live process, so this
  * costs a directory read, and when several sessions are open at once, "which of these is still
  * going" is a more urgent question than anything in the history below it.
  */
-function LiveDot({ live }: { live: LiveSessionInfo }) {
+function LiveDot({ live, label = true }: { live?: LiveSessionInfo; label?: boolean }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full bg-positive/10 px-1.5 py-0.5 text-2xs font-medium whitespace-nowrap text-positive"
-      title={`Running now — pid ${live.pid}${live.entrypoint ? `, launched from ${live.entrypoint}` : ''}`}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full text-2xs font-medium whitespace-nowrap text-positive',
+        label && 'bg-positive/10 px-1.5 py-0.5',
+      )}
+      title={
+        live
+          ? `Running now — pid ${live.pid}${live.entrypoint ? `, launched from ${live.entrypoint}` : ''}`
+          : 'Running now'
+      }
     >
       <span className="relative flex size-1.5">
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-positive opacity-60" />
         <span className="relative inline-flex size-1.5 rounded-full bg-positive" />
       </span>
-      live
+      {label ? 'live' : null}
     </span>
   );
 }
 
-function Timeline({ id, onClose }: { id: string; onClose: () => void }) {
+function Detail({ id, onClose }: { id: string; onClose: () => void }) {
   const query = useSessionDetail(id);
   const session = query.data;
 
@@ -174,6 +170,79 @@ function Timeline({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
+/** A log: dated entries, the clock in a gutter, newest first. Totals belong to Overview. */
+function Row({
+  session,
+  selected,
+  onSelect,
+}: {
+  session: SessionSummary;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const focus = session.categories[0];
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected}
+        className={cn(
+          'flex w-full gap-3 px-4 py-2.5 text-left transition-colors hover:bg-sunken/60 sm:px-5',
+          selected && 'bg-sunken',
+        )}
+      >
+        <span
+          className={cn(
+            'tabular w-11 shrink-0 pt-px text-2xs',
+            selected ? 'text-accent' : 'text-subtle',
+          )}
+        >
+          {formatTime(session.startedAt)}
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-xs font-medium text-ink">
+              {session.projectName ?? 'No project'}
+            </span>
+            {session.live ? <LiveDot live={session.live} /> : null}
+            {focus ? (
+              <span className="text-2xs text-subtle">{focus.category.toLowerCase()}</span>
+            ) : null}
+            {/* A session older than the window reports only the part inside it. */}
+            {session.startedBeforeRange ? (
+              <span className="text-2xs text-subtle/80">
+                began {formatDate(session.startedAt)}, before this range
+              </span>
+            ) : null}
+          </span>
+
+          <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+            <span className="tabular text-muted">{formatExact(session.promptCount)} prompts</span>
+            <span className="tabular">{formatDuration(session.activeMs)}</span>
+            <span className="tabular">{formatNumber(session.toolCount)} tools</span>
+            <span className="tabular">
+              {formatNumber(session.inputTokens + session.outputTokens)} tok
+            </span>
+            {session.estimatedCostUsd !== null ? (
+              <span className="tabular">{formatCost(session.estimatedCostUsd)}</span>
+            ) : null}
+            {session.primaryModel ? <Mono className="text-2xs">{session.primaryModel}</Mono> : null}
+            <span className="truncate">{session.providerName}</span>
+          </span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** One dated heading per day, carrying that day's own totals rather than the page's. */
+function dayLabel(iso: string): string {
+  return formatDate(iso);
+}
+
 export function SessionsPage() {
   const [filters] = useFilters();
   const [selected, setSelected] = useState<string | null>(null);
@@ -184,134 +253,78 @@ export function SessionsPage() {
   const data = query.data;
   const rows = data?.items ?? [];
   const totals = data?.totals;
-  const leader = Math.max(...rows.map((row) => row.promptCount), 1);
-  const sources = new Set(rows.map((row) => row.providerName));
+
+  const days: Array<{ key: string; label: string; sessions: SessionSummary[] }> = [];
+  for (const session of rows) {
+    const key = session.startedAt.slice(0, 10);
+    const last = days[days.length - 1];
+    if (last && last.key === key) last.sessions.push(session);
+    else days.push({ key, label: dayLabel(session.startedAt), sessions: [session] });
+  }
 
   return (
     <>
       <PageHeader
         title="Sessions"
-        description="Each conversation with an AI tool. Every figure is what happened inside the selected range."
-        actions={
-          totals && totals.liveNow > 0 ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-positive/10 px-2.5 py-1 text-2xs font-medium text-positive">
-              <Radio className="size-3" aria-hidden="true" />
-              {totals.liveNow} running now
-            </span>
-          ) : null
-        }
+        description="Every conversation with an AI tool, newest first, with what is running right now at the top."
       />
       <FilterBar dimensions={['provider', 'project', 'model']} />
 
       {/* Started but silent: a session that opened moments ago has no events yet, so it appears
           on no chart. Saying so is the difference between "nothing is running" and "not yet". */}
-      {(data?.liveOnly.length ?? 0) > 0 ? (
-        <Card className="mb-4 border-positive/25">
-          <CardHeader
-            title="Running now, nothing recorded yet"
-            description="These sessions are open but have not produced any activity in this range."
-          />
-          <ul className="divide-y divide-line">
-            {data?.liveOnly.map((session) => (
-              <li
-                key={session.externalId}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-xs"
-              >
-                <span className="relative flex size-1.5 shrink-0">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-positive opacity-60" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-positive" />
-                </span>
-                <span className="font-medium text-ink">
-                  {session.name ?? session.externalId.slice(0, 8)}
-                </span>
-                <Mono className="truncate">{session.workingDirectory ?? '—'}</Mono>
-                <span className="ml-auto text-2xs text-subtle">
-                  started {formatRelative(session.startedAt)}
-                  {session.entrypoint ? ` · ${session.entrypoint}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+      {(data?.liveOnly.length ?? 0) > 0 || (totals?.liveNow ?? 0) > 0 ? (
+        <section className="mb-4 rounded-lg border border-positive/25 bg-positive/4 px-4 py-3">
+          <h2 className="flex items-center gap-2 text-xs font-semibold text-ink">
+            <LiveDot label={false} />
+            {formatExact(totals?.liveNow ?? 0)} running right now
+          </h2>
+          {(data?.liveOnly.length ?? 0) > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {data?.liveOnly.map((session) => (
+                <li
+                  key={session.externalId}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs"
+                >
+                  <span className="font-medium text-ink">
+                    {session.name ?? session.externalId.slice(0, 8)}
+                  </span>
+                  <Mono className="truncate text-2xs">{session.workingDirectory ?? '—'}</Mono>
+                  <span className="text-subtle">
+                    started {formatRelative(session.startedAt)}
+                    {session.entrypoint ? ` · ${session.entrypoint}` : ''} · nothing recorded yet
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
       ) : null}
 
       {totals ? (
-        <div className="mb-4 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi
-              label="Sessions"
-              value={formatExact(totals.sessions)}
-              sub={`${sources.size} ${sources.size === 1 ? 'source' : 'sources'} in this selection`}
-              series={rows.map((row) => row.promptCount).reverse()}
-            />
-            <Kpi
-              label="Prompts"
-              value={formatExact(totals.prompts)}
-              sub="inside this range"
-              series={rows.map((row) => row.promptCount).reverse()}
-            />
-            <Kpi
-              label="Active time"
-              value={formatDuration(totals.activeMs)}
-              sub="idle gaps excluded"
-              series={rows.map((row) => row.activeMs).reverse()}
-            />
-            <Kpi
-              label="Estimated cost"
-              value={formatCost(totals.estimatedCostUsd)}
-              sub="at list API prices"
-              series={rows.map((row) => row.estimatedCostUsd ?? 0).reverse()}
-            />
-          </div>
-
-          <StatGrid>
-            <Stat label="Running now" value={formatExact(totals.liveNow)} sub="live sessions" />
-            <Stat
-              label="Per session"
-              value={
-                totals.sessions > 0
-                  ? formatExact(Math.round(totals.prompts / totals.sessions))
-                  : '—'
-              }
-              sub="prompts on average"
-            />
-            <Stat
-              label="Longest"
-              value={formatDuration(Math.max(...rows.map((row) => row.activeMs), 0))}
-              sub="active time"
-            />
-            <Stat
-              label="Busiest"
-              value={formatExact(Math.max(...rows.map((row) => row.promptCount), 0))}
-              sub="prompts in one session"
-            />
-            <Stat
-              label="Projects"
-              value={formatExact(new Set(rows.map((r) => r.projectName).filter(Boolean)).size)}
-              sub="touched"
-            />
-            <Stat label="Sources" value={formatExact(sources.size)} sub={[...sources].join(', ')} />
-            <Stat
-              label="Tool calls"
-              value={formatNumber(rows.reduce((sum, row) => sum + row.toolCount, 0))}
-              sub="on this page"
-            />
-            <Stat
-              label="Shown"
-              value={`${formatExact(rows.length)}`}
-              sub={`of ${formatExact(totals.sessions)} sessions`}
-            />
-          </StatGrid>
-        </div>
+        <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+          <span className="tabular text-muted">
+            {formatExact(totals.sessions)} sessions in this range
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="tabular">{formatNumber(totals.prompts)} prompts</span>
+          <span aria-hidden="true">·</span>
+          <span className="tabular">{formatDuration(totals.activeMs)} active</span>
+          {totals.estimatedCostUsd !== null ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="tabular">{formatCost(totals.estimatedCostUsd)} at API prices</span>
+            </>
+          ) : null}
+        </p>
       ) : null}
 
       <div
         className={cn(
-          'grid gap-4',
-          selected ? 'lg:grid-cols-[minmax(0,1fr)_24rem]' : 'grid-cols-1',
+          'grid items-start gap-4',
+          selected ? 'xl:grid-cols-[minmax(0,1fr)_25rem]' : '',
         )}
       >
-        <Card className="min-w-0 overflow-hidden">
+        <Card className="min-w-0 overflow-hidden p-0">
           {query.isError ? (
             <ErrorState error={query.error} onRetry={() => void query.refetch()} compact />
           ) : query.isLoading ? (
@@ -324,75 +337,40 @@ export function SessionsPage() {
             />
           ) : (
             <>
-              <ul className="divide-y divide-line">
-                {rows.map((session, index) => {
-                  const focus = session.categories[0];
-                  return (
-                    <li key={session.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(session.id)}
-                        aria-current={selected === session.id}
-                        className={cn(
-                          'w-full px-5 py-3 text-left transition-colors hover:bg-sunken/60',
-                          selected === session.id && 'bg-sunken',
-                        )}
-                      >
-                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                          <span
-                            className="size-1.5 shrink-0 rounded-full"
-                            style={{ background: chartColor(index) }}
-                            aria-hidden="true"
-                          />
-                          <span className="truncate text-xs font-medium text-ink">
-                            {session.projectName ?? 'No project'}
-                          </span>
-                          {session.live ? <LiveDot live={session.live} /> : null}
-                          <Badge tone="muted">{session.providerName}</Badge>
-                          {focus ? (
-                            <span className="text-2xs text-subtle">
-                              mostly {focus.category.toLowerCase()}
-                            </span>
-                          ) : null}
-                          <span className="tabular ml-auto shrink-0 text-xs text-ink">
-                            {formatExact(session.promptCount)} prompts
-                          </span>
-                        </div>
-
-                        <Bar
-                          value={(session.promptCount / leader) * 100}
-                          color={chartColor(index)}
-                          className={cn('mt-2', index === 0 ? '' : 'opacity-75')}
+              {days.map((day) => {
+                const prompts = day.sessions.reduce((sum, row) => sum + row.promptCount, 0);
+                const active = day.sessions.reduce((sum, row) => sum + row.activeMs, 0);
+                return (
+                  <section key={day.key}>
+                    <h2 className="flex flex-wrap items-baseline gap-x-3 border-y border-line bg-sunken/70 px-4 py-1.5 text-2xs sm:px-5">
+                      <span className="font-medium tracking-wide text-ink uppercase">
+                        {day.label}
+                      </span>
+                      <span className="tabular text-subtle">
+                        {formatExact(day.sessions.length)}{' '}
+                        {day.sessions.length === 1 ? 'session' : 'sessions'} ·{' '}
+                        {formatNumber(prompts)} prompts · {formatDuration(active)}
+                      </span>
+                    </h2>
+                    <ul className="divide-y divide-line/60">
+                      {day.sessions.map((session) => (
+                        <Row
+                          key={session.id}
+                          session={session}
+                          selected={selected === session.id}
+                          onSelect={() => setSelected(session.id)}
                         />
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
 
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                          <span>{formatDateTime(session.startedAt)}</span>
-                          <span className="tabular">{formatDuration(session.activeMs)} active</span>
-                          <span className="tabular">{formatNumber(session.toolCount)} tools</span>
-                          <span className="tabular">
-                            {formatNumber(session.inputTokens + session.outputTokens)} tok
-                          </span>
-                          {session.estimatedCostUsd !== null ? (
-                            <span className="tabular">{formatCost(session.estimatedCostUsd)}</span>
-                          ) : null}
-                          {session.primaryModel ? (
-                            <Mono className="text-2xs">{session.primaryModel}</Mono>
-                          ) : null}
-                          {/* A session older than the window reports only the part inside it. */}
-                          {session.startedBeforeRange ? (
-                            <span className="text-subtle/80">
-                              began {formatDate(session.startedAt)}, before this range
-                            </span>
-                          ) : null}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              <div className="flex items-center justify-between border-t border-line px-5 py-3">
-                <p className="text-2xs text-subtle">Page {page + 1}</p>
+              <div className="flex items-center justify-between border-t border-line px-4 py-3 sm:px-5">
+                <p className="text-2xs text-subtle">
+                  Page {page + 1} · showing {formatExact(rows.length)} of{' '}
+                  {formatExact(totals?.sessions ?? rows.length)}
+                </p>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -424,7 +402,7 @@ export function SessionsPage() {
           )}
         </Card>
 
-        {selected ? <Timeline id={selected} onClose={() => setSelected(null)} /> : null}
+        {selected ? <Detail id={selected} onClose={() => setSelected(null)} /> : null}
       </div>
     </>
   );
