@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { claudeHome } from '@ai-footprint/config';
 
 /**
  * What Claude Code already knows about the account, from `~/.claude.json`. A local file read,
@@ -42,9 +43,25 @@ const TIER_PRICES: ReadonlyArray<readonly [RegExp, string, number]> = [
   [/\bpro\b/i, 'Claude Pro', 20],
 ];
 
+/**
+ * `.claude.json` sits beside the `.claude` directory, so it is looked for relative to whatever
+ * CLAUDE_CONFIG_DIR points at before falling back to the real home. Without that, a test or a
+ * container reads the developer's own account.
+ */
+function configPath(home: string): string {
+  const configured = claudeHome();
+  for (const candidate of [
+    join(configured, '.claude.json'),
+    join(dirname(configured), '.claude.json'),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return join(home, '.claude.json');
+}
+
 function readClaudeConfig(home = homedir()): Record<string, unknown> | null {
   try {
-    return JSON.parse(readFileSync(join(home, '.claude.json'), 'utf8')) as Record<string, unknown>;
+    return JSON.parse(readFileSync(configPath(home), 'utf8')) as Record<string, unknown>;
   } catch {
     return null;
   }

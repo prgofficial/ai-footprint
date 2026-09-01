@@ -80,7 +80,8 @@ test.describe('with real analytics', () => {
 
   test('the overview reports tokens, cost and the work behind them', async ({ page }) => {
     await page.goto('/?range=30d');
-    await expect(page.getByText('Estimated cost')).toBeVisible();
+    // "API-equivalent" when a subscription is detected, "Estimated cost" otherwise.
+    await expect(page.getByText(/Estimated cost|API-equivalent/).first()).toBeVisible();
     await expect(page.getByText('Cache reuse')).toBeVisible();
     await expect(page.getByText('Tool calls')).toBeVisible();
     await expect(page.getByRole('link', { name: 'claude-opus-4-8' })).toBeVisible();
@@ -142,7 +143,10 @@ test.describe('with real analytics', () => {
 
   test('a session opens a timeline', async ({ page }) => {
     await page.goto('/sessions?range=30d');
-    await page.getByRole('row').nth(1).click();
+    await page
+      .getByRole('button', { name: /prompts/ })
+      .first()
+      .click();
     await expect(page.getByRole('complementary', { name: 'Session detail' })).toBeVisible();
   });
 
