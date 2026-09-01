@@ -10,7 +10,15 @@ export const RANGE_OPTIONS = [
   { value: 'all', label: 'All time' },
 ] as const;
 
-const KEYS = ['range', 'providerId', 'projectId', 'model', 'category', 'technology'] as const;
+const KEYS = [
+  'range',
+  'providerId',
+  'projectId',
+  'model',
+  'category',
+  'technology',
+  'includeSubagents',
+] as const;
 
 /** Filters live in the URL so a view can be linked, reloaded and shared with yourself. */
 export function useFilters(): [Filters, (patch: Partial<Filters>) => void, () => void] {

@@ -165,6 +165,43 @@ function DetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
   );
 }
 
+/**
+ * Sub-agent prompts are written by the assistant, not typed, and are two thirds of what is
+ * stored here. The default is what you wrote; the rest is one click away.
+ */
+function AuthorToggle() {
+  const [filters, update] = useFilters();
+  const mode = filters.includeSubagents === 'false' ? 'you' : 'all';
+
+  return (
+    <div
+      className="inline-flex rounded-md border border-line bg-sunken p-0.5"
+      role="group"
+      aria-label="Prompt author"
+    >
+      {(
+        [
+          ['you', 'You', 'false'],
+          ['all', 'Everything', undefined],
+        ] as const
+      ).map(([key, label, value]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={mode === key}
+          onClick={() => update({ includeSubagents: value })}
+          className={cn(
+            'rounded px-2.5 py-1 text-2xs font-medium whitespace-nowrap transition-colors',
+            mode === key ? 'bg-raised text-ink shadow-card' : 'text-subtle hover:text-ink',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PromptsPage() {
   const [filters] = useFilters();
   const [params, setParams] = useSearchParams();
@@ -197,26 +234,29 @@ export function PromptsPage() {
     <>
       <PageHeader
         title="Prompts"
-        description="Search everything you have ever asked. Nothing leaves this machine."
+        description="Search what you asked. Nothing leaves this machine."
       />
 
       <FilterBar
         dimensions={['provider', 'project', 'category', 'model']}
         extra={
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-subtle"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Search prompts"
-              aria-label="Search prompts"
-              className="h-7 w-56 rounded-md border border-line bg-raised pr-2 pl-7 text-xs text-ink placeholder:text-subtle"
-            />
-          </div>
+          <>
+            <AuthorToggle />
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-subtle"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Search prompts"
+                aria-label="Search prompts"
+                className="h-7 w-56 rounded-md border border-line bg-raised pr-2 pl-7 text-xs text-ink placeholder:text-subtle"
+              />
+            </div>
+          </>
         }
       />
 

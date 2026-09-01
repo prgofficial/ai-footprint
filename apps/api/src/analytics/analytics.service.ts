@@ -99,6 +99,9 @@ export class AnalyticsService {
     });
 
     const shared: EventFilters = {
+      // Sub-agent prompts are written by the assistant, not by the person. On this machine they
+      // are 65% of everything the Prompts page listed, which made its own description false.
+      includeSubagents: query.includeSubagents === 'false' ? false : undefined,
       providerId: query.providerId,
       projectId: query.projectId,
       model: query.model,

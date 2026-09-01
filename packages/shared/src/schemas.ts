@@ -96,6 +96,8 @@ export const rangeQuerySchema = z
     from: isoTimestamp.optional(),
     to: isoTimestamp.optional(),
     timezone: ianaTimeZone.optional(),
+    /** `false` hides the assistant's own sub-agent fan-out, which the person never typed. */
+    includeSubagents: z.enum(['true', 'false']).optional(),
     providerId: z.string().max(64).optional(),
     projectId: z.string().max(64).optional(),
     model: z.string().max(128).optional(),

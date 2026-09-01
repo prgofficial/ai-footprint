@@ -25,6 +25,9 @@ function Fact({ label, value }: { label: string; value: string }) {
 export function ProfilePage() {
   const [filters] = useFilters();
   const query = useProfile(filters);
+  // Tenure is a fact about the whole history, not about the tab you happen to have selected.
+  // Reading it from the scoped response made "Recorded since" restate the range tab.
+  const history = useProfile({ range: 'all' });
   const data = query.data;
 
   return (
@@ -86,9 +89,9 @@ export function ProfilePage() {
             <Fact label="Total sessions" value={formatExact(data.totalSessions)} />
           </dl>
 
-          {data.firstActivityAt ? (
+          {history.data?.firstActivityAt ? (
             <p className="mt-8 border-t border-line pt-4 text-2xs text-subtle">
-              Recorded since {formatDate(data.firstActivityAt)}. Everything on this page was
+              Recorded since {formatDate(history.data.firstActivityAt)}. Everything on this page was
               computed on this machine from your own activity.
             </p>
           ) : null}

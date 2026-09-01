@@ -7,7 +7,9 @@ import type { BucketRow, NamedCount, Totals } from './analytics';
  * table. Anything they cannot answer falls back to the event log rather than guessing.
  */
 export function rollupsCanAnswer(filters: EventFilters): boolean {
-  return !filters.technology && !filters.eventType;
+  // Rollups carry no technology, event-type or sub-agent dimension. A question narrowed by any
+  // of those has to be answered from the event log, or the filter is silently ignored.
+  return !filters.technology && !filters.eventType && filters.includeSubagents !== false;
 }
 
 function buildRollupWhere(filters: EventFilters, days: { from: string; to: string }) {

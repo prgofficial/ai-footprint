@@ -115,6 +115,13 @@ function ProviderCard({ provider }: { provider: ProviderSummary }) {
                 Disconnect
               </Button>
             </div>
+          ) : !provider.capabilities.historicalBackfill ? (
+            // A tool that pushes its own events has nothing to connect TO. Offering "Connect"
+            // here returned 404, on three of the four cards, while their data was already on
+            // every chart. Its state comes from the events it has actually sent.
+            <Badge tone={provider.eventCount > 0 ? 'positive' : 'muted'}>
+              {provider.eventCount > 0 ? 'sending events' : 'nothing received yet'}
+            </Badge>
           ) : (
             <Button
               size="sm"

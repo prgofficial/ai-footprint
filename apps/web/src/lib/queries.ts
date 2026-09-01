@@ -25,6 +25,8 @@ import { apiGet, apiPatch, apiPost } from './api';
 
 export interface Filters {
   range: string;
+  /** 'false' hides the assistant's own sub-agent prompts. */
+  includeSubagents?: string;
   from?: string;
   to?: string;
   providerId?: string;
@@ -36,6 +38,7 @@ export interface Filters {
 
 export function filterParams(filters: Filters): Record<string, string | undefined> {
   return {
+    includeSubagents: filters.includeSubagents,
     range: filters.range,
     from: filters.from,
     to: filters.to,
