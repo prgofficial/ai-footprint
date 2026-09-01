@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/layout/page';
 import { Badge, Button, Card, Mono } from '@/components/ui/primitives';
 import { EmptyState, ErrorState, InlineNote, SkeletonRows } from '@/components/ui/states';
 import { useFilters } from '@/hooks/useFilters';
-import { useOverrideCategory, usePromptDetail, usePrompts } from '@/lib/queries';
+import { useOverrideCategory, usePromptDetail, usePromptThemes, usePrompts } from '@/lib/queries';
 import { cn, formatDateTime, formatExact, formatNumber, formatPercent } from '@/lib/utils';
 import { PROMPT_CATEGORIES } from '@ai-footprint/shared';
 
@@ -222,6 +222,7 @@ export function PromptsPage() {
   }, [input]);
 
   const query = usePrompts(filters, search, cursors[page]);
+  const themes = usePromptThemes(filters);
 
   const select = (id: string | null) => {
     const next = new URLSearchParams(params);
@@ -259,6 +260,26 @@ export function PromptsPage() {
           </>
         }
       />
+
+      {/* Your own recurring vocabulary, as searches rather than as a word cloud. A page that
+          only ranked these terms said less than the technology list on Overview; offering them
+          as one click into the corpus is the thing the terms are actually good for. */}
+      {(themes.data?.themes.length ?? 0) > 0 && !search ? (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-2xs text-subtle">You often write about</span>
+          {themes.data?.themes.map((theme) => (
+            <button
+              key={theme.term}
+              type="button"
+              onClick={() => setInput(theme.term)}
+              className="inline-flex items-center gap-1.5 rounded border border-line bg-raised px-1.5 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-ink"
+            >
+              {theme.term}
+              <span className="tabular text-subtle">{formatNumber(theme.count)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div
         className={cn(

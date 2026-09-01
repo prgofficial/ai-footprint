@@ -9,9 +9,8 @@ import type {
   ModelUsage,
   OverviewResponse,
   Paginated,
-  ProfileResponse,
   ProjectUsage,
-  PromptAnalyticsResponse,
+  PromptThemesResponse,
   PromptDetail,
   PromptListItem,
   ProviderSummary,
@@ -119,17 +118,11 @@ export const useInsights = (filters: Filters) =>
     queryFn: () => apiGet<InsightsResponse>(`${ANALYTICS}/insights`, filterParams(filters)),
   });
 
-export const useProfile = (filters: Filters) =>
+export const usePromptThemes = (filters: Filters) =>
   useQuery({
-    queryKey: ['profile', filters],
-    queryFn: () => apiGet<ProfileResponse>(`${ANALYTICS}/profile`, filterParams(filters)),
-  });
-
-export const usePromptAnalytics = (filters: Filters) =>
-  useQuery({
-    queryKey: ['prompt-analytics', filters],
+    queryKey: ['prompt-themes', filters],
     queryFn: () =>
-      apiGet<PromptAnalyticsResponse>(`${ANALYTICS}/prompts/analytics`, filterParams(filters)),
+      apiGet<PromptThemesResponse>(`${ANALYTICS}/prompts/themes`, filterParams(filters)),
   });
 
 export const useActivity = (filters: Filters, cursor?: string, eventType?: string) =>

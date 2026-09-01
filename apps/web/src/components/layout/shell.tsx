@@ -6,14 +6,18 @@ import { cn } from '@/lib/utils';
 import { APP_NAME, VENDOR_NAME, VENDOR_SHORT, VENDOR_URL } from '@ai-footprint/shared';
 import { Button } from '../ui/primitives';
 
+/**
+ * Eight sections, each answering a question none of the others does: how much (Overview), what
+ * ran (Sessions), where (Projects), what you asked (Prompts), the raw record (Activity), what it
+ * all means (Insights). A ninth restated the sixth in a second layout and has gone.
+ */
 const NAV = [
   { to: '/', label: 'Overview', end: true },
-  { to: '/activity', label: 'Activity' },
-  { to: '/prompts', label: 'Prompts' },
-  { to: '/projects', label: 'Projects' },
   { to: '/sessions', label: 'Sessions' },
+  { to: '/projects', label: 'Projects' },
+  { to: '/prompts', label: 'Prompts' },
+  { to: '/activity', label: 'Activity' },
   { to: '/insights', label: 'Insights' },
-  { to: '/profile', label: 'Profile' },
   { to: '/connections', label: 'Connections' },
   { to: '/settings', label: 'Settings' },
 ];

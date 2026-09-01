@@ -292,11 +292,14 @@ export function ColumnChart({
   data,
   name,
   formatter,
+  dim,
   ...size
 }: {
   data: SeriesPoint[];
   name: string;
   formatter?: (value: number | string) => string;
+  /** Columns outside the window being discussed, drawn back so the point stands out. */
+  dim?: (index: number) => boolean;
 } & Sized) {
   const animate = !prefersReducedMotion();
   return (
@@ -311,7 +314,10 @@ export function ColumnChart({
       />
       <Bar dataKey="value" name={name} radius={[2, 2, 0, 0]} isAnimationActive={animate}>
         {data.map((_, index) => (
-          <Cell key={index} fill="rgb(var(--accent))" />
+          <Cell
+            key={index}
+            fill={dim?.(index) ? 'rgb(var(--accent) / 0.28)' : 'rgb(var(--accent))'}
+          />
         ))}
       </Bar>
     </BarChart>

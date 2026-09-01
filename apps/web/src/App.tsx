@@ -9,9 +9,7 @@ import { ActivityPage } from '@/pages/Activity';
 import { ConnectionsPage } from '@/pages/Connections';
 import { InsightsPage } from '@/pages/Insights';
 import { OverviewPage } from '@/pages/Overview';
-import { ProfilePage } from '@/pages/Profile';
 import { ProjectsPage } from '@/pages/Projects';
-import { PromptAnalyticsPage } from '@/pages/PromptAnalytics';
 import { PromptsPage } from '@/pages/Prompts';
 import { SessionsPage } from '@/pages/Sessions';
 import { SettingsPage } from '@/pages/Settings';
@@ -66,11 +64,9 @@ export function App() {
             <Route path="/" element={<OverviewPage />} />
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
-            <Route path="/prompts/analytics" element={<PromptAnalyticsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/insights" element={<InsightsPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -107,10 +107,13 @@ function RankedList({
   rows,
   emptyLabel,
   linkTo,
+  remainder,
 }: {
   rows: RankRow[];
   emptyLabel: string;
   linkTo?: (key: string) => string;
+  /** What the top N left out, stated rather than hidden behind a link to another page. */
+  remainder?: Array<{ share: number }>;
 }) {
   if (rows.length === 0) {
     return <p className="px-5 pb-5 text-xs text-subtle">{emptyLabel}</p>;
@@ -151,6 +154,15 @@ function RankedList({
           />
         </li>
       ))}
+      {remainder && remainder.length > 0 ? (
+        <li className="pt-1 text-2xs text-subtle">
+          {formatExact(remainder.length)} smaller, together{' '}
+          {formatPercent(
+            remainder.reduce((sum, row) => sum + row.share, 0),
+            1,
+          )}
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -453,20 +465,7 @@ function PeriodDashboard({ data, range }: { data: OverviewResponse; range: strin
 
       <div className="grid items-start gap-4 lg:grid-cols-3">
         <Card>
-          <CardHeader
-            title="Top areas"
-            description="What you brought to AI"
-            action={
-              data.categories.length > TOP_N ? (
-                <Link
-                  to={`/prompts/analytics?range=${range}`}
-                  className="text-2xs text-subtle transition-colors hover:text-accent"
-                >
-                  All {data.categories.length}
-                </Link>
-              ) : null
-            }
-          />
+          <CardHeader title="Top areas" description="What you brought to AI" />
           <RankedList
             rows={data.categories.slice(0, TOP_N).map((row) => ({
               key: row.category,
@@ -476,6 +475,7 @@ function PeriodDashboard({ data, range }: { data: OverviewResponse; range: strin
             }))}
             emptyLabel="Nothing classified yet."
             linkTo={(key) => `/prompts?range=${range}&category=${encodeURIComponent(key)}`}
+            remainder={data.categories.slice(TOP_N)}
           />
         </Card>
 
