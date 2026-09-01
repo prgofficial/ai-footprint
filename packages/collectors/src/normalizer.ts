@@ -48,7 +48,7 @@ export function normalize(
     contentHash: input.externalId ? null : contentIdentity(input),
   });
 
-  const estimatedCostUsd = estimateCostUsd(modelFamily, input);
+  const estimatedCostUsd = estimateCostUsd(input.model, input);
 
   const record: IngestRecord = {
     event: {

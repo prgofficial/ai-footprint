@@ -4,5 +4,6 @@ export * from './drift';
 export * from './hook-events';
 export * from './hooks';
 export * from './mappers';
+export * from './plan';
 export * from './records';
 export * from './transcript-reader';

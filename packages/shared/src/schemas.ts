@@ -59,6 +59,7 @@ export const aiEventInputSchema = z.object({
   outputTokens: z.number().int().nonnegative().nullish(),
   cacheReadTokens: z.number().int().nonnegative().nullish(),
   cacheWriteTokens: z.number().int().nonnegative().nullish(),
+  cacheWrite1hTokens: z.number().int().min(0).nullish(),
   durationMs: z.number().int().nonnegative().nullish(),
   sourceVersion: z.string().max(64).nullish(),
   metadata: z.record(z.unknown()).nullish(),

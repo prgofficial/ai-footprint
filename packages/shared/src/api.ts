@@ -134,10 +134,26 @@ export interface OverviewPeriod {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** input + output + cache read + cache write: what the cost is actually built from. */
+  billableTokens: MetricDelta;
   projects: number;
   promptsPerSession: number;
   msPerSession: number;
   busiestBucket: { bucket: string; prompts: number } | null;
+}
+
+/** What the machine already knows about how this usage is actually paid for. */
+export interface PlanSummary {
+  billing: 'subscription' | 'api' | 'unknown';
+  name: string | null;
+  monthlyUsd: number | null;
+  /** The subscription fee attributable to the selected range, prorated by days. */
+  periodUsd: number | null;
+  /** Anthropic's own window percentages. A live snapshot; there is no history to draw. */
+  usage: Array<{ kind: string; percent: number; resetsAt: string | null }>;
+  usageFetchedAt: string | null;
+  /** Real money spent beyond the plan fee. */
+  overageUsd: number | null;
 }
 
 export interface OverviewResponse {
@@ -145,6 +161,7 @@ export interface OverviewResponse {
   /** Bucket size of `timeline`; active time is only meaningful at day granularity. */
   granularity: 'hour' | 'day' | 'week';
   period: OverviewPeriod;
+  plan: PlanSummary | null;
   sources: Array<{ providerId: string; name: string; prompts: number; share: number }>;
   categories: Array<{ category: PromptCategory; prompts: number; share: number }>;
   projects: Array<{ projectId: string; name: string; prompts: number; share: number }>;

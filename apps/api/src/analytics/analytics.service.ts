@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { extractThemes } from '@ai-footprint/analytics';
+import { detectPlan, detectPlanUsage } from '@ai-footprint/collectors';
 import { ACTIVE_TIME_TAIL_ALLOWANCE_MS } from '@ai-footprint/shared';
 import { rollupsCanAnswer, type EventFilters } from '@ai-footprint/database';
 import { localDateIn } from '@ai-footprint/database';
@@ -11,6 +12,7 @@ import type {
   ModelUsage,
   OverviewPeriod,
   OverviewResponse,
+  PlanSummary,
   Paginated,
   ProfileResponse,
   ProjectUsage,
@@ -194,6 +196,13 @@ export class AnalyticsService {
         prior.inputTokens + prior.outputTokens,
       ),
       toolCalls: delta(current.toolCalls, prior.toolCalls),
+      billableTokens: delta(
+        current.inputTokens +
+          current.outputTokens +
+          current.cacheReadTokens +
+          current.cacheWriteTokens,
+        prior.inputTokens + prior.outputTokens + prior.cacheReadTokens + prior.cacheWriteTokens,
+      ),
       estimatedCostUsd: costDelta(current.estimatedCostUsd, prior.estimatedCostUsd),
       inputTokens: current.inputTokens,
       outputTokens: current.outputTokens,
@@ -212,6 +221,7 @@ export class AnalyticsService {
       range,
       granularity: series.granularity,
       period,
+      plan: this.plan(range),
       sources: providers.map((row) => ({
         providerId: row.key,
         name: row.name,
@@ -246,6 +256,33 @@ export class AnalyticsService {
         sessions: current.sessions,
         projects: current.projects,
       },
+    };
+  }
+
+  /**
+   * A subscriber's cost is not what the tokens would have cost on the API; it is a flat fee,
+   * and Claude Code already records which plan sets it. Read from a local file, so this costs
+   * no network call.
+   */
+  private plan(range: ResolvedRange): PlanSummary | null {
+    const detected = detectPlan();
+    if (detected.billing === 'unknown' && !detected.planName) return null;
+
+    const usage = detectPlanUsage();
+    const days = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+    const periodUsd =
+      detected.monthlyUsd === null
+        ? null
+        : Math.round(((detected.monthlyUsd * days) / 30.437) * 100) / 100;
+
+    return {
+      billing: detected.billing,
+      name: detected.planName,
+      monthlyUsd: detected.monthlyUsd,
+      periodUsd,
+      usage: usage?.windows ?? [],
+      usageFetchedAt: usage?.fetchedAt ?? null,
+      overageUsd: usage?.overageUsd ?? null,
     };
   }
 

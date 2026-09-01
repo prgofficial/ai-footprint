@@ -83,6 +83,59 @@ function Kpi({
 /** Three ranked cards side by side only read as a set if they are the same height. */
 const TOP_N = 8;
 
+/**
+ * On a subscription the API-equivalent figure is not a bill and never will be, the bill is a
+ * flat monthly fee. Showing only the API figure invited it to be read as money owed; showing
+ * only the fee gives a hero tile that never moves. Both, with the ratio between them, answers
+ * the question a subscriber actually has: was it worth it.
+ */
+function CostKpi({
+  period,
+  plan,
+  series,
+}: {
+  period: OverviewResponse['period'];
+  plan: OverviewResponse['plan'];
+  series: number[];
+}) {
+  const api = period.estimatedCostUsd.value;
+  const subscription = plan?.billing === 'subscription' ? plan : null;
+  const paid = subscription?.periodUsd ?? null;
+  const leverage = api !== null && paid !== null && paid > 0 ? api / paid : null;
+
+  if (!subscription) {
+    return (
+      <Kpi
+        label="Estimated cost"
+        value={formatCost(api)}
+        delta={period.estimatedCostUsd.changePct === null ? undefined : period.estimatedCostUsd}
+        hint="Estimated from token counts and published list prices."
+        sub="at list API prices"
+        series={series}
+      />
+    );
+  }
+
+  return (
+    <Kpi
+      label="API-equivalent"
+      value={formatCost(api)}
+      hint={`What this usage would have cost at published API prices. You are on ${subscription.name ?? 'a subscription'}, so it is not a bill — your actual cost for this period is ${formatCost(paid)}.`}
+      sub={
+        <span className="flex items-center gap-1.5">
+          <span>you paid {formatCost(paid)}</span>
+          {leverage !== null ? (
+            <Badge tone="positive" className="px-1.5 py-0">
+              {leverage >= 10 ? Math.round(leverage) : leverage.toFixed(1)}× value
+            </Badge>
+          ) : null}
+        </span>
+      }
+      series={series}
+    />
+  );
+}
+
 interface RankRow {
   key: string;
   name: string;
@@ -361,20 +414,18 @@ function PeriodDashboard({ data, range }: { data: OverviewResponse; range: strin
         />
         <Kpi
           label="Tokens"
-          value={formatNumber(period.tokens.value)}
-          delta={period.tokens}
-          hint={`${formatExact(period.inputTokens)} in, ${formatExact(period.outputTokens)} out`}
-          sub={`${formatNumber(period.inputTokens)} in · ${formatNumber(period.outputTokens)} out`}
+          // Every billable token, not just input and output. Cache reads are the great majority
+          // of the cost here, and showing 168M beside a cost built from 41 billion left the two
+          // tiles impossible to reconcile.
+          value={formatNumber(period.billableTokens.value)}
+          delta={period.billableTokens}
+          hint={`${formatExact(period.inputTokens)} in · ${formatExact(period.outputTokens)} out · ${formatExact(period.cacheReadTokens)} cache read · ${formatExact(period.cacheWriteTokens)} cache write`}
+          sub={`${formatNumber(period.cacheReadTokens)} of it re-read from cache`}
           series={timeline.map((point) => point.inputTokens + point.outputTokens)}
         />
-        <Kpi
-          label="Estimated cost"
-          value={formatCost(period.estimatedCostUsd.value)}
-          delta={period.estimatedCostUsd.changePct === null ? undefined : period.estimatedCostUsd}
-          hint="Estimated from token counts and published list prices. It does not reflect a subscription."
-          sub="at list API prices"
-          // Only the buckets that carry a price. Plotting an unknown cost as 0 drew a floor
-          // the same card's data table shows as ",".
+        <CostKpi
+          period={period}
+          plan={data.plan}
           series={timeline
             .filter((point) => point.estimatedCostUsd !== null)
             .map((point) => point.estimatedCostUsd ?? 0)}

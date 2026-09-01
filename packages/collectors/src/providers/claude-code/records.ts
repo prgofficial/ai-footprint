@@ -36,6 +36,11 @@ export interface TranscriptMessage {
   id?: string;
 }
 
+export interface TranscriptCacheCreation {
+  ephemeral_5m_input_tokens?: number;
+  ephemeral_1h_input_tokens?: number;
+}
+
 export interface TranscriptContentBlock {
   type?: string;
   text?: string;
@@ -52,6 +57,8 @@ export interface TranscriptUsage {
   output_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+  /** Splits the cache write by lifetime. A 1-hour write bills at 2x input, a 5-minute one at 1.25x. */
+  cache_creation?: TranscriptCacheCreation;
   service_tier?: string;
 }
 

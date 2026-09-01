@@ -106,7 +106,7 @@ describe('normalize', () => {
     expect(record.prompt?.charLength).toBeGreaterThan(0);
   });
 
-  it('estimates cost only when the model family is priced', () => {
+  it('prices on the model id, not the family', () => {
     const priced = normalize(
       input({
         eventType: 'response',
@@ -116,7 +116,20 @@ describe('normalize', () => {
       }),
       options,
     );
-    expect(priced.event.estimatedCostUsd).toBeCloseTo(15, 5);
+    // Opus 4.5 and later are $5/MTok input. Pricing by family charged the retired Opus 4.1
+    // rate of $15 to every Opus, which overstated real histories threefold.
+    expect(priced.event.estimatedCostUsd).toBeCloseTo(5, 5);
+
+    const retired = normalize(
+      input({
+        eventType: 'response',
+        model: 'claude-opus-4-1',
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+      }),
+      options,
+    );
+    expect(retired.event.estimatedCostUsd).toBeCloseTo(15, 5);
 
     const unknown = normalize(
       input({ eventType: 'response', model: 'some-unreleased-model', inputTokens: 1_000_000 }),

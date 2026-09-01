@@ -101,6 +101,9 @@ export function mapRecord(record: TranscriptRecord, ctx: MapContext): AIEventInp
       event.outputTokens = usage?.output_tokens ?? null;
       event.cacheReadTokens = usage?.cache_read_input_tokens ?? null;
       event.cacheWriteTokens = usage?.cache_creation_input_tokens ?? null;
+      // Claude Code writes 1-hour caches, which bill at 2x input rather than 1.25x. The split
+      // is in the transcript; reading only the flat total understated the write line by 40%.
+      event.cacheWrite1hTokens = usage?.cache_creation?.ephemeral_1h_input_tokens ?? null;
       if (ctx.storeResponses && text) event.response = text;
       event.metadata = compactMetadata({
         stopReason: record.message?.stop_reason,

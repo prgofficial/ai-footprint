@@ -34,6 +34,8 @@ export interface AIEvent {
   outputTokens?: number | null;
   cacheReadTokens?: number | null;
   cacheWriteTokens?: number | null;
+  /** The 1-hour share of `cacheWriteTokens`, which bills at twice the 5-minute rate. */
+  cacheWrite1hTokens?: number | null;
   /** Null whenever the model is unknown. Never guessed. */
   estimatedCostUsd?: number | null;
 
@@ -79,6 +81,7 @@ export function dedupeKeyInput(parts: {
 }
 
 const FAMILY_PATTERNS: ReadonlyArray<readonly [RegExp, ModelFamily]> = [
+  [/fable|mythos/i, 'opus'],
   [/opus/i, 'opus'],
   [/sonnet/i, 'sonnet'],
   [/haiku/i, 'haiku'],

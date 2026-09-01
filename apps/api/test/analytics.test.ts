@@ -188,10 +188,11 @@ describe('overview headline metrics', () => {
 
   it('gives cost a comparison rather than a bare number', async () => {
     const week = await overview('7d');
-    // 10 opus replies at 0.0066 each plus 3 sonnet replies at 0.00132 each.
-    expect(week.period.estimatedCostUsd.value).toBeCloseTo(0.06996, 5);
-    expect(week.period.estimatedCostUsd.previous).toBeCloseTo(0.033, 5);
-    expect(week.period.estimatedCostUsd.changePct).toBe(112);
+    // Opus 4.8 at $5/$25/$0.50 -> 0.0022 a reply; Sonnet 4.5 at $3/$15/$0.30 -> 0.00132.
+    // 10 opus + 3 sonnet in the window, 5 opus in the one before.
+    expect(week.period.estimatedCostUsd.value).toBeCloseTo(0.02596, 5);
+    expect(week.period.estimatedCostUsd.previous).toBeCloseTo(0.011, 5);
+    expect(week.period.estimatedCostUsd.changePct).toBe(136);
   });
 
   it('derives the per-session shape of the range', async () => {
