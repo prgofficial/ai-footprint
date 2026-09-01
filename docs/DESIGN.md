@@ -51,10 +51,10 @@ System sans throughout; monospace only for paths, models, identifiers and code.
 | `text-2xs` | 11px | Labels, metadata, evidence lines |
 | `text-xs` | 12px | Table cells, list rows, help text |
 | `text-sm` | 13px | Body, section headings |
-| `text-lg` | 16px | Card titles in the profile |
+| `text-lg` | 16px | The lead observation on Insights |
 | `text-xl` | 20px | Page titles |
 | `text-2xl` | 26px | Metric values |
-| `text-3xl` | 36px | Profile distribution figures |
+| `text-3xl` | 36px | KPI values, the lead evidence figure |
 
 Numeric columns use `font-variant-numeric: tabular-nums` so figures line up down a column.
 
@@ -92,7 +92,26 @@ Every chart is paired with a **Show data** toggle that swaps it for the same num
 table. That is what makes the charts usable with a screen reader, and it is often the faster
 way to read them.
 
+## One page, one form
+
+A shared component set is not a licence to draw every screen the same way. When six screens
+all opened with four metric tiles, a strip of eight more figures and a ranked list with bars,
+they became interchangeable — and a reader who cannot tell two pages apart has no reason to
+visit the second. Each screen is set in the form its question deserves:
+
+| Screen | Form | Why |
+| --- | --- | --- |
+| Overview | Dashboard — tiles, trend chart, ranked breakdowns | The only screen asking "how much, and which way is it going" |
+| Sessions | Log — dated headings, a clock in the gutter, newest first | A session is an entry in a journal, and the live ones belong at the top |
+| Projects | Table — sortable columns, a share rule under each name | Comparing a dozen codebases across four measures is a table's job |
+| Prompts | Search — the field first, your own recurring terms beside it | The question is "where did I say that" |
+| Activity | Feed — sticky day headers, the machine's turns folded away | A record, read in order |
+| Insights | Document — a lede, then numbered statements on ruled lines | A reading, not a dashboard |
+
+Figures are not repeated across screens. Where two screens could show the same number, the
+one that owns the question keeps it and the other links across.
+
 ## Navigation
 
-A single top bar. No sidebar, no nested menus, no breadcrumbs. Nine destinations, each one
+A single top bar. No sidebar, no nested menus, no breadcrumbs. Eight destinations, each one
 noun. Filters live in the URL, so any view can be linked or reloaded exactly as it was.

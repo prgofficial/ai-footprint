@@ -50,8 +50,9 @@ Connect a tool once and AI Footprint answers questions a billing page cannot:
 - How long are my sessions, and how much of that is real working time?
 - What do I keep asking again?
 
-Eleven surfaces: a dashboard, an activity feed, a searchable prompt history, prompt
-analytics, project and session analytics, insights, a personal usage profile, connections
+Eight screens, each answering a question none of the others does: an overview of how much,
+a session log of what ran, a project table of where, a searchable prompt history of what you
+asked, an activity feed of the raw record, insights into what it all means, plus connections
 and settings.
 
 Every number comes from your own events. There is no sample data anywhere in the product.
