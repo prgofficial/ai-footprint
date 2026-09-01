@@ -77,7 +77,9 @@ function CostKpi({
       sub={
         <span className="flex items-center gap-1.5">
           <span>you paid {formatCost(paid)}</span>
-          {leverage !== null ? (
+          {/* Only once the usage is worth more than the fee. Below that the ratio rounds to
+              "0.0× value", which is meaningless and the opposite of what it means. */}
+          {leverage !== null && leverage >= 1 ? (
             <Badge tone="positive" className="px-1.5 py-0">
               {leverage >= 10 ? Math.round(leverage) : leverage.toFixed(1)}× value
             </Badge>
