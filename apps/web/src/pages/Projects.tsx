@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Boxes, Clock3, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { FilterBar } from '@/components/layout/filter-bar';
 import { PageHeader } from '@/components/layout/page';
-import { Badge, Bar, Card, CardHeader, Kpi, Stat, StatGrid } from '@/components/ui/primitives';
-import { EmptyState, ErrorState, SkeletonMetrics, SkeletonRows } from '@/components/ui/states';
+import { Badge, Card } from '@/components/ui/primitives';
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/ui/states';
 import { useFilters } from '@/hooks/useFilters';
 import { useProjects } from '@/lib/queries';
 import {
-  chartColor,
   cn,
   formatDuration,
   formatExact,
@@ -17,24 +16,6 @@ import {
   formatRelative,
 } from '@/lib/utils';
 import type { ProjectUsage } from '@ai-footprint/shared';
-
-/**
- * The page exists to answer "which codebase is eating my AI time", and time was the one column
- * it could not sort by. Ranking by prompts alone put a project with four prompts and four hours
- * of work at row twenty-one.
- */
-const METRICS = [
-  {
-    key: 'activeMs',
-    label: 'Active time',
-    of: (p: ProjectUsage) => p.activeMs,
-    format: formatDuration,
-  },
-  { key: 'prompts', label: 'Prompts', of: (p: ProjectUsage) => p.prompts, format: formatNumber },
-  { key: 'sessions', label: 'Sessions', of: (p: ProjectUsage) => p.sessions, format: formatExact },
-] as const;
-
-type MetricKey = (typeof METRICS)[number]['key'];
 
 interface Rolled extends ProjectUsage {
   children: ProjectUsage[];
@@ -83,24 +64,46 @@ function rollUp(projects: ProjectUsage[]): Rolled[] {
   return parents;
 }
 
+/**
+ * Comparing a dozen codebases across four measures is a table's job, and the page exists to
+ * answer "which one is eating my time", a question that changes with the column you sort by.
+ * Ranking by prompts alone put a project with four prompts and four hours of work at row 21.
+ */
+const COLUMNS = [
+  { key: 'name', label: 'Project', numeric: false, of: () => 0 },
+  { key: 'activeMs', label: 'Active time', numeric: true, of: (p: Rolled) => p.activeMs },
+  { key: 'prompts', label: 'Prompts', numeric: true, of: (p: Rolled) => p.prompts },
+  { key: 'sessions', label: 'Sessions', numeric: true, of: (p: Rolled) => p.sessions },
+  {
+    key: 'lastActivityAt',
+    label: 'Last used',
+    numeric: true,
+    of: (p: Rolled) => Date.parse(p.lastActivityAt ?? '') || 0,
+  },
+] as const;
+
+type SortKey = (typeof COLUMNS)[number]['key'];
+
 export function ProjectsPage() {
   const [filters] = useFilters();
   const query = useProjects(filters);
-  const [metric, setMetric] = useState<MetricKey>('activeMs');
+  const [sort, setSort] = useState<SortKey>('activeMs');
   const [showQuiet, setShowQuiet] = useState(false);
 
-  const active = METRICS.find((entry) => entry.key === metric) ?? METRICS[0];
   const rolled = useMemo(() => rollUp(query.data ?? []), [query.data]);
-
   const busy = rolled.filter((project) => project.prompts > 0);
   const quiet = rolled.filter((project) => project.prompts === 0);
-  const ranked = [...busy].sort((a, b) => active.of(b) - active.of(a));
 
-  const total = ranked.reduce((sum, project) => sum + active.of(project), 0);
-  const leader = Math.max(...ranked.map((project) => active.of(project)), 1);
-  const totalActive = ranked.reduce((sum, project) => sum + project.activeMs, 0);
-  const totalPrompts = ranked.reduce((sum, project) => sum + project.prompts, 0);
-  const topThree = ranked.slice(0, 3).reduce((sum, project) => sum + project.activeMs, 0);
+  const column = COLUMNS.find((entry) => entry.key === sort) ?? COLUMNS[1];
+  const rows = [...busy].sort((a, b) =>
+    column.key === 'name' ? a.name.localeCompare(b.name) : column.of(b) - column.of(a),
+  );
+
+  const totalActive = rows.reduce((sum, project) => sum + project.activeMs, 0);
+  const totalPrompts = rows.reduce((sum, project) => sum + project.prompts, 0);
+  const folded = rows.reduce((sum, project) => sum + project.children.length, 0);
+  const byTime = [...rows].sort((a, b) => b.activeMs - a.activeMs);
+  const leader = byTime[0];
 
   return (
     <>
@@ -113,13 +116,10 @@ export function ProjectsPage() {
       {query.isError ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isLoading ? (
-        <div className="space-y-4">
-          <SkeletonMetrics />
-          <Card>
-            <SkeletonRows />
-          </Card>
-        </div>
-      ) : ranked.length === 0 ? (
+        <Card>
+          <SkeletonRows />
+        </Card>
+      ) : rows.length === 0 ? (
         <Card>
           <EmptyState
             title="No projects detected yet"
@@ -129,172 +129,152 @@ export function ProjectsPage() {
         </Card>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi
-              label="Active time"
-              value={formatDuration(totalActive)}
-              sub="across every project"
-              series={ranked.map((project) => project.activeMs)}
-            />
-            <Kpi
-              label="Prompts"
-              value={formatExact(totalPrompts)}
-              sub="in this period"
-              series={ranked.map((project) => project.prompts)}
-            />
-            <Kpi
-              label="Projects"
-              value={formatExact(ranked.length)}
-              sub={quiet.length > 0 ? `${quiet.length} more with no prompts` : 'with activity'}
-              series={ranked.map((project) => project.prompts)}
-            />
-            <Kpi
-              label="Concentration"
-              value={totalActive > 0 ? formatPercent((topThree / totalActive) * 100) : '—'}
-              sub="of your time in the top three"
-              series={ranked.map((project) => project.activeMs)}
-            />
-          </div>
+          {/* The headline in a sentence. Four tiles restating Overview taught nobody anything. */}
+          <p className="max-w-3xl text-sm leading-relaxed text-muted">
+            <strong className="font-medium text-ink">{formatExact(rows.length)} projects</strong>{' '}
+            took {formatDuration(totalActive)} of active time and {formatNumber(totalPrompts)}{' '}
+            prompts.
+            {leader && totalActive > 0 ? (
+              <>
+                {' '}
+                <strong className="font-medium text-ink">{leader.name}</strong> alone accounts for{' '}
+                {formatPercent((leader.activeMs / totalActive) * 100)} of it.
+              </>
+            ) : null}
+            {folded > 0 ? (
+              <>
+                {' '}
+                <span className="text-subtle">
+                  {formatExact(folded)} subdirector{folded === 1 ? 'y is' : 'ies are'} folded into
+                  the codebase above them.
+                </span>
+              </>
+            ) : null}
+          </p>
 
-          <StatGrid>
-            <Stat
-              label="Busiest"
-              icon={<Boxes className="size-3" aria-hidden="true" />}
-              value={ranked[0]?.name ?? '—'}
-              sub={formatDuration(ranked[0]?.activeMs ?? 0)}
-            />
-            <Stat
-              label="Its share"
-              value={
-                totalActive > 0
-                  ? formatPercent(((ranked[0]?.activeMs ?? 0) / totalActive) * 100)
-                  : '—'
-              }
-              sub="of active time"
-            />
-            <Stat
-              label="Per project"
-              icon={<Clock3 className="size-3" aria-hidden="true" />}
-              value={formatDuration(totalActive / Math.max(ranked.length, 1))}
-              sub="active time, average"
-            />
-            <Stat
-              label="Prompts each"
-              icon={<Layers className="size-3" aria-hidden="true" />}
-              value={formatExact(Math.round(totalPrompts / Math.max(ranked.length, 1)))}
-              sub="on average"
-            />
-            <Stat
-              label="Touched once"
-              value={formatExact(ranked.filter((project) => project.sessions <= 1).length)}
-              sub="single-session projects"
-            />
-            <Stat
-              label="Rolled up"
-              value={formatExact(ranked.reduce((sum, project) => sum + project.children.length, 0))}
-              sub="subdirectories merged"
-            />
-            <Stat
-              label="Repositories"
-              value={formatExact(ranked.filter((project) => project.repository).length)}
-              sub="with a git remote"
-            />
-            <Stat
-              label="Newest"
-              value={formatRelative(ranked[0]?.lastActivityAt)}
-              sub="last activity"
-            />
-          </StatGrid>
-
-          <Card>
-            <CardHeader
-              title="Where your time goes"
-              description={`${formatExact(ranked.length)} projects, ranked by ${active.label.toLowerCase()}`}
-              action={
-                <div
-                  className="inline-flex rounded-md border border-line bg-sunken p-0.5"
-                  role="group"
-                  aria-label="Rank projects by"
-                >
-                  {METRICS.map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      aria-pressed={metric === entry.key}
-                      onClick={() => setMetric(entry.key)}
-                      className={cn(
-                        'rounded px-2.5 py-1 text-2xs font-medium whitespace-nowrap transition-colors',
-                        metric === entry.key
-                          ? 'bg-raised text-ink shadow-card'
-                          : 'text-subtle hover:text-ink',
-                      )}
-                    >
-                      {entry.label}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
-
-            <ul className="space-y-3.5 px-5 pb-5">
-              {ranked.map((project, index) => (
-                <li key={project.projectId}>
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <span
-                      className="size-1.5 shrink-0 rounded-full"
-                      style={{ background: chartColor(index) }}
-                      aria-hidden="true"
-                    />
-                    <Link
-                      to={`/prompts?range=${filters.range}&projectId=${encodeURIComponent(project.projectId)}`}
-                      className="truncate text-xs font-medium text-ink transition-colors hover:text-accent"
-                    >
-                      {project.name}
-                    </Link>
-                    {project.children.length > 0 ? (
-                      <Badge tone="muted" title={project.children.map((c) => c.name).join(', ')}>
-                        +{project.children.length} sub
-                      </Badge>
-                    ) : null}
-                    {project.repository ? (
-                      <span className="truncate text-2xs text-subtle">{project.repository}</span>
-                    ) : null}
-                    <span className="tabular ml-auto shrink-0 text-xs font-medium text-ink">
-                      {active.format(active.of(project))}
-                    </span>
-                    <span className="tabular w-11 shrink-0 text-right text-2xs text-subtle">
-                      {total > 0 ? formatPercent((active.of(project) / total) * 100, 1) : '—'}
-                    </span>
-                  </div>
-
-                  <Bar
-                    value={(active.of(project) / leader) * 100}
-                    color={chartColor(index)}
-                    className={index === 0 ? '' : 'opacity-75'}
-                  />
-
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                    <span className="tabular">{formatNumber(project.prompts)} prompts</span>
-                    <span className="tabular">{formatExact(project.sessions)} sessions</span>
-                    <span className="tabular">{formatDuration(project.activeMs)} active</span>
-                    <span>{formatRelative(project.lastActivityAt)}</span>
-                    {project.topCategories.slice(0, 2).map((entry) => (
-                      <span key={entry.category}>{entry.category.toLowerCase()}</span>
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-184 border-collapse text-xs">
+                <caption className="sr-only">
+                  Projects with activity, sorted by {column.label.toLowerCase()}
+                </caption>
+                <thead>
+                  <tr className="border-b border-line">
+                    {COLUMNS.map((entry) => (
+                      <th
+                        key={entry.key}
+                        scope="col"
+                        aria-sort={sort === entry.key ? 'descending' : 'none'}
+                        className={cn(
+                          'bg-sunken/60 px-4 py-2.5 font-medium',
+                          entry.numeric ? 'text-right' : 'text-left',
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSort(entry.key)}
+                          className={cn(
+                            'inline-flex items-center gap-1 text-2xs tracking-wide uppercase transition-colors',
+                            sort === entry.key ? 'text-ink' : 'text-subtle hover:text-ink',
+                          )}
+                        >
+                          {entry.numeric && sort === entry.key ? (
+                            <ChevronDown className="size-3" aria-hidden="true" />
+                          ) : null}
+                          {entry.label}
+                          {!entry.numeric && sort === entry.key ? (
+                            <ChevronUp className="size-3" aria-hidden="true" />
+                          ) : null}
+                        </button>
+                      </th>
                     ))}
-                    {project.topTechnologies.slice(0, 3).map((entry) => (
-                      <Badge key={entry.technology} tone="neutral">
-                        {entry.technology}
-                      </Badge>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((project) => {
+                    const share = totalActive > 0 ? (project.activeMs / totalActive) * 100 : 0;
+                    return (
+                      <tr
+                        key={project.projectId}
+                        className="border-b border-line/70 transition-colors last:border-0 hover:bg-sunken/50"
+                      >
+                        <th scope="row" className="max-w-88 px-4 py-3 text-left font-normal">
+                          {/* The share is drawn under the name rather than in a column of its
+                              own: it is context for the row, not another number to compare. */}
+                          <Link
+                            to={`/prompts?range=${filters.range}&projectId=${encodeURIComponent(project.projectId)}`}
+                            className="block truncate font-medium text-ink transition-colors hover:text-accent"
+                          >
+                            {project.name}
+                          </Link>
+                          <span
+                            className="mt-1.5 block h-0.5 rounded-full bg-accent/70"
+                            style={{ width: `${Math.max(share, 0.6)}%` }}
+                            aria-hidden="true"
+                          />
+                          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle">
+                            <span className="tabular">{formatPercent(share, 1)} of time</span>
+                            {project.children.length > 0 ? (
+                              <Badge
+                                tone="muted"
+                                title={project.children.map((child) => child.name).join(', ')}
+                              >
+                                +{project.children.length} sub
+                              </Badge>
+                            ) : null}
+                            {project.repository ? (
+                              <span className="truncate">{project.repository}</span>
+                            ) : null}
+                            {project.topCategories[0] ? (
+                              <span>{project.topCategories[0].category.toLowerCase()}</span>
+                            ) : null}
+                            {project.topTechnologies.slice(0, 2).map((entry) => (
+                              <Badge key={entry.technology} tone="neutral">
+                                {entry.technology}
+                              </Badge>
+                            ))}
+                          </span>
+                        </th>
+                        <td className="tabular px-4 py-3 text-right whitespace-nowrap text-ink">
+                          {formatDuration(project.activeMs)}
+                        </td>
+                        <td className="tabular px-4 py-3 text-right whitespace-nowrap text-muted">
+                          {formatNumber(project.prompts)}
+                        </td>
+                        <td className="tabular px-4 py-3 text-right whitespace-nowrap text-muted">
+                          {formatExact(project.sessions)}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap text-subtle">
+                          {formatRelative(project.lastActivityAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-line">
+                    <th scope="row" className="px-4 py-2.5 text-left text-2xs text-subtle">
+                      Total
+                    </th>
+                    <td className="tabular px-4 py-2.5 text-right text-2xs text-ink">
+                      {formatDuration(totalActive)}
+                    </td>
+                    <td className="tabular px-4 py-2.5 text-right text-2xs text-ink">
+                      {formatNumber(totalPrompts)}
+                    </td>
+                    <td className="tabular px-4 py-2.5 text-right text-2xs text-ink">
+                      {formatExact(rows.reduce((sum, project) => sum + project.sessions, 0))}
+                    </td>
+                    <td className="px-4 py-2.5" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
 
             {/* Directories with sessions but no prompts are real, and they are not the answer to
                 anything. One line, not nine rows with links to an empty page. */}
             {quiet.length > 0 ? (
-              <div className="border-t border-line px-5 py-3">
+              <div className="border-t border-line px-4 py-3">
                 <button
                   type="button"
                   onClick={() => setShowQuiet((value) => !value)}
