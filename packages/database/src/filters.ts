@@ -14,6 +14,7 @@ export interface EventFilters {
   category?: string;
   technology?: string;
   eventType?: string;
+  sessionId?: string;
   includeSubagents?: boolean;
 }
 
@@ -60,6 +61,10 @@ export function buildEventWhere(filters: EventFilters, alias = 'e'): WhereClause
   if (filters.model) {
     clauses.push(`${alias}.model = ?`);
     params.push(filters.model);
+  }
+  if (filters.sessionId) {
+    clauses.push(`${alias}.session_id = ?`);
+    params.push(filters.sessionId);
   }
   if (filters.eventType) {
     clauses.push(`${alias}.event_type = ?`);

@@ -234,6 +234,7 @@ export interface TechnologyUsage {
 export interface SessionSummary {
   id: string;
   providerId: string;
+  providerName: string;
   externalId: string | null;
   projectId: string | null;
   projectName: string | null;
@@ -248,6 +249,31 @@ export interface SessionSummary {
   outputTokens: number;
   estimatedCostUsd: number | null;
   categories: Array<{ category: PromptCategory; count: number }>;
+  /** True when the session began before the window; the row reports only the part inside it. */
+  startedBeforeRange: boolean;
+  /** Running right now, according to Claude Code's own live-session registry. */
+  live: LiveSessionInfo | null;
+}
+
+/** A session that is running at this moment. Read from a local file; nothing is signalled. */
+export interface LiveSessionInfo {
+  pid: number;
+  name: string | null;
+  kind: string | null;
+  entrypoint: string | null;
+  startedAt: string | null;
+}
+
+export interface SessionsResponse extends Paginated<SessionSummary> {
+  /** Live sessions with no stored events yet: started, but not yet on any chart. */
+  liveOnly: Array<{ externalId: string; workingDirectory: string | null } & LiveSessionInfo>;
+  totals: {
+    sessions: number;
+    prompts: number;
+    activeMs: number;
+    estimatedCostUsd: number | null;
+    liveNow: number;
+  };
 }
 
 export interface SessionDetail extends SessionSummary {

@@ -378,21 +378,7 @@ export class AnalyticsRepository {
   ): { items: SessionRow[]; nextCursor: string | null } {
     const clauses: string[] = [];
     const params: unknown[] = [];
-    // A session that began before the window but did its work inside it is counted by every
-    // other view; filtering on started_at alone made the list disagree with the KPI above it
-    // and hid any session a tool keeps open across midnight.
-    if (filters.from || filters.fromDay || filters.to || filters.toDay) {
-      const from = filters.from ?? (filters.fromDay ? `${filters.fromDay}T00:00:00.000Z` : null);
-      const to = filters.to ?? (filters.toDay ? `${filters.toDay}T23:59:59.999Z` : null);
-      if (to) {
-        clauses.push('s.started_at <= ?');
-        params.push(to);
-      }
-      if (from) {
-        clauses.push('COALESCE(s.ended_at, s.started_at) >= ?');
-        params.push(from);
-      }
-    }
+    // The window is applied to the events, so no date predicate belongs here.
     if (filters.providerId) {
       clauses.push('s.provider_id = ?');
       params.push(filters.providerId);
@@ -409,30 +395,49 @@ export class AnalyticsRepository {
     }
 
     const cursor = decodeCursor(options.cursor);
-    if (cursor) {
-      clauses.push('(s.started_at, s.id) < (?, ?)');
-      params.push(cursor.timestamp, cursor.id);
-    }
 
+    // Grouped over the events INSIDE the window, not read off the session row. A session that
+    // ran for three weeks used to contribute its entire lifetime to any range it touched, so the
+    // list added up to more than the Overview it sits beside (4,904 prompts against 2,977) and
+    // nothing said why.
+    const scope = buildEventWhere(filters);
     const rows = this.connection
       .prepare(
         `SELECT s.id, s.provider_id AS providerId, s.external_id AS externalId,
+                COALESCE(pr.name, s.provider_id) AS providerName,
                 s.project_id AS projectId, pj.name AS projectName, s.primary_model AS primaryModel,
-                s.started_at AS startedAt, s.ended_at AS endedAt, s.duration_ms AS durationMs,
-                s.active_ms AS activeMs, s.prompt_count AS promptCount, s.tool_count AS toolCount,
-                s.input_tokens AS inputTokens, s.output_tokens AS outputTokens,
-                s.estimated_cost_usd AS estimatedCostUsd
-         FROM sessions s LEFT JOIN projects pj ON pj.id = s.project_id
-         WHERE ${clauses.length > 0 ? clauses.join(' AND ') : '1 = 1'}
-         ORDER BY s.started_at DESC, s.id DESC LIMIT ?`,
+                MIN(e.timestamp) AS startedAt,
+                MAX(e.timestamp) AS endedAt,
+                s.started_at AS sessionStartedAt,
+                CAST(MAX((julianday(MAX(e.timestamp)) - julianday(MIN(e.timestamp))) * 86400000, 0)
+                     AS INTEGER) AS durationMs,
+                0 AS activeMs,
+                SUM(CASE WHEN e.event_type = 'prompt' THEN 1 ELSE 0 END) AS promptCount,
+                SUM(CASE WHEN e.event_type = 'tool_call' THEN 1 ELSE 0 END) AS toolCount,
+                COALESCE(SUM(e.input_tokens), 0) AS inputTokens,
+                COALESCE(SUM(e.output_tokens), 0) AS outputTokens,
+                SUM(e.estimated_cost_usd) AS estimatedCostUsd
+         FROM events e
+         JOIN sessions s ON s.id = e.session_id
+         LEFT JOIN projects pj ON pj.id = s.project_id
+         LEFT JOIN providers pr ON pr.id = s.provider_id
+         WHERE ${scope.sql}
+           ${clauses.length > 0 ? `AND ${clauses.join(' AND ')}` : ''}
+         GROUP BY e.session_id
+         ORDER BY MAX(e.timestamp) DESC, s.id DESC LIMIT ?`,
       )
-      .all(...params, options.limit + 1) as SessionRow[];
+      .all(...scope.params, ...params, options.limit + 1) as SessionRow[];
 
-    const items = rows.slice(0, options.limit);
+    const paged = cursor
+      ? rows.filter(
+          (row) => (row.endedAt ?? row.startedAt) < cursor.timestamp || row.id < cursor.id,
+        )
+      : rows;
+    const items = paged.slice(0, options.limit);
     const last = items[items.length - 1];
     const nextCursor =
-      rows.length > options.limit && last
-        ? encodeCursor({ timestamp: last.startedAt, id: last.id })
+      paged.length > options.limit && last
+        ? encodeCursor({ timestamp: last.endedAt ?? last.startedAt, id: last.id })
         : null;
     return { items, nextCursor };
   }
@@ -607,6 +612,12 @@ export class AnalyticsRepository {
 
 export interface SessionRow {
   id: string;
+  /** The tool that produced it. Four sources make rows indistinguishable without this. */
+  providerName?: string;
+  /** True when the session began before the selected window; its row reports only the part inside. */
+  startedBeforeRange?: boolean;
+  /** When it began, whether or not that was inside the window. */
+  sessionStartedAt?: string;
   providerId: string;
   externalId: string | null;
   projectId: string | null;

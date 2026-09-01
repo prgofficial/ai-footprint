@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { extractThemes } from '@ai-footprint/analytics';
-import { detectPlan, detectPlanUsage } from '@ai-footprint/collectors';
+import { detectPlan, detectPlanUsage, listLiveSessions } from '@ai-footprint/collectors';
 import { ACTIVE_TIME_TAIL_ALLOWANCE_MS } from '@ai-footprint/shared';
 import { rollupsCanAnswer, type EventFilters } from '@ai-footprint/database';
 import { localDateIn } from '@ai-footprint/database';
@@ -23,6 +23,7 @@ import type {
   RangeQuery,
   ResolvedRange,
   SessionDetail,
+  SessionsResponse,
   SessionSummary,
   TaskContext,
   TechnologyUsage,
@@ -564,21 +565,72 @@ export class AnalyticsService {
     };
   }
 
-  sessions(query: RangeQuery & { limit: number; cursor?: string }): Paginated<SessionSummary> {
+  sessions(query: RangeQuery & { limit: number; cursor?: string }): SessionsResponse {
     const store = this.stores.store;
-    const { filters } = this.scope(query);
+    const scope = this.scope(query);
+    const { filters, range } = scope;
     const page = store.analytics.sessions(filters, { limit: query.limit, cursor: query.cursor });
     const categories = store.analytics.sessionCategories(page.items.map((row) => row.id));
 
-    return {
-      items: page.items.map((row) => ({
+    // Which of these is running right now. Claude Code keeps a file per live process; matching
+    // on its own session id is what lets a historical list also answer "what is happening now".
+    const live = listLiveSessions();
+    const liveByExternalId = new Map(live.map((session) => [session.externalId, session]));
+
+    const items: SessionSummary[] = page.items.map((row) => {
+      const running = row.externalId ? liveByExternalId.get(row.externalId) : undefined;
+      return {
         ...row,
+        providerName: row.providerName ?? row.providerId,
+        // Active time within the window, computed the same way every other view computes it.
+        activeMs: store.analytics.activeMs(
+          { ...filters, sessionId: row.id },
+          scope.idleTimeoutMs,
+          ACTIVE_TIME_TAIL_ALLOWANCE_MS,
+        ),
+        startedBeforeRange: (row.sessionStartedAt ?? row.startedAt) < range.from,
+        live: running
+          ? {
+              pid: running.pid,
+              name: running.name,
+              kind: running.kind,
+              entrypoint: running.entrypoint,
+              startedAt: running.startedAt,
+            }
+          : null,
         categories: (categories.get(row.id) ?? []).slice(0, 5).map((entry) => ({
           category: entry.category as PromptCategory,
           count: entry.count,
         })),
-      })),
+      };
+    });
+
+    const known = new Set(page.items.map((row) => row.externalId));
+    const totals = this.totalsFor(scope, filters, scope.days);
+
+    return {
+      items,
       nextCursor: page.nextCursor,
+      // A session that started moments ago has no events yet, so it is on no chart. Saying so is
+      // the difference between "nothing is running" and "it has not spoken yet".
+      liveOnly: live
+        .filter((session) => !known.has(session.externalId))
+        .map((session) => ({
+          externalId: session.externalId,
+          workingDirectory: session.workingDirectory,
+          pid: session.pid,
+          name: session.name,
+          kind: session.kind,
+          entrypoint: session.entrypoint,
+          startedAt: session.startedAt,
+        })),
+      totals: {
+        sessions: totals.sessions,
+        prompts: totals.prompts,
+        activeMs: totals.activeMs,
+        estimatedCostUsd: totals.estimatedCostUsd,
+        liveNow: live.length,
+      },
     };
   }
 
@@ -590,8 +642,23 @@ export class AnalyticsService {
     const categories = store.analytics.sessionCategories([id]);
     const timeline = store.analytics.sessionTimeline(id);
 
+    const running = summary.externalId
+      ? listLiveSessions().find((session) => session.externalId === summary.externalId)
+      : undefined;
+
     return {
       ...summary,
+      providerName: summary.providerName ?? summary.providerId,
+      startedBeforeRange: false,
+      live: running
+        ? {
+            pid: running.pid,
+            name: running.name,
+            kind: running.kind,
+            entrypoint: running.entrypoint,
+            startedAt: running.startedAt,
+          }
+        : null,
       categories: (categories.get(id) ?? []).map((entry) => ({
         category: entry.category as PromptCategory,
         count: entry.count,

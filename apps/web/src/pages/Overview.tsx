@@ -8,17 +8,18 @@ import {
   Repeat2,
   Wrench,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FilterBar } from '@/components/layout/filter-bar';
 import { PageHeader } from '@/components/layout/page';
-import { AreaTrend, ChartFrame, Sparkline } from '@/components/charts/primitives';
+import { AreaTrend, ChartFrame } from '@/components/charts/primitives';
 import {
   Badge,
   Bar,
   Card,
   CardHeader,
   DeltaPill,
+  Kpi,
   SegmentedMeter,
   Stat,
   StatGrid,
@@ -39,56 +40,8 @@ import {
   formatPercent,
   type Granularity,
 } from '@/lib/utils';
-import type { MetricDelta, OverviewResponse, TimeseriesPoint } from '@ai-footprint/shared';
+import type { OverviewResponse, TimeseriesPoint } from '@ai-footprint/shared';
 
-/**
- * A headline figure for the selected range. The sparkline is the same range again, in shape
- * rather than in total, so the number and its story sit in one glance.
- */
-function Kpi({
-  label,
-  value,
-  sub,
-  delta,
-  series,
-  hint,
-}: {
-  label: string;
-  value: string;
-  sub: ReactNode;
-  delta?: MetricDelta | { changePct: number | null };
-  series: number[];
-  hint?: string;
-}) {
-  return (
-    <Card className="flex flex-col overflow-hidden p-0 transition-colors hover:border-line-strong">
-      <div className="flex-1 px-5 pt-4 pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-2xs font-medium tracking-wide text-subtle uppercase">{label}</p>
-          {delta ? <DeltaPill changePct={delta.changePct} /> : null}
-        </div>
-        <p
-          className="tabular mt-2.5 text-3xl leading-none font-semibold tracking-tight text-ink"
-          title={hint}
-        >
-          {value}
-        </p>
-        <p className="mt-2 truncate text-xs text-subtle">{sub}</p>
-      </div>
-      <Sparkline values={series} className="h-9 w-full" />
-    </Card>
-  );
-}
-
-/** Three ranked cards side by side only read as a set if they are the same height. */
-const TOP_N = 8;
-
-/**
- * On a subscription the API-equivalent figure is not a bill and never will be, the bill is a
- * flat monthly fee. Showing only the API figure invited it to be read as money owed; showing
- * only the fee gives a hero tile that never moves. Both, with the ratio between them, answers
- * the question a subscriber actually has: was it worth it.
- */
 function CostKpi({
   period,
   plan,
@@ -135,6 +88,9 @@ function CostKpi({
     />
   );
 }
+
+/** Three ranked cards side by side only read as a set if they are the same height. */
+const TOP_N = 8;
 
 interface RankRow {
   key: string;

@@ -16,7 +16,7 @@ import type {
   PromptListItem,
   ProviderSummary,
   SessionDetail,
-  SessionSummary,
+  SessionsResponse,
   SettingsResponse,
   StorageResponse,
   SystemConfigResponse,
@@ -153,6 +153,8 @@ export const usePrompts = (filters: Filters, search: string, cursor?: string) =>
         limit: 50,
       }),
     placeholderData: (previous) => previous,
+    // A live session should not need a page reload to appear.
+    refetchInterval: 15_000,
   });
 
 export const usePromptDetail = (id: string | null) =>
@@ -166,12 +168,14 @@ export const useSessions = (filters: Filters, cursor?: string) =>
   useQuery({
     queryKey: ['sessions', filters, cursor],
     queryFn: () =>
-      apiGet<Paginated<SessionSummary>>(`${ANALYTICS}/sessions`, {
+      apiGet<SessionsResponse>(`${ANALYTICS}/sessions`, {
         ...filterParams(filters),
         cursor,
         limit: 50,
       }),
     placeholderData: (previous) => previous,
+    // A live session should not need a page reload to appear.
+    refetchInterval: 15_000,
   });
 
 export const useSessionDetail = (id: string | null) =>

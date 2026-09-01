@@ -1,5 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from 'react';
+import type { MetricDelta } from '@ai-footprint/shared';
+import { Sparkline } from '../charts/primitives';
 import { chartColor, cn, formatDelta } from '@/lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -177,6 +179,45 @@ export function StatGrid({ children, className }: { children: ReactNode; classNa
   return (
     <Card className={cn('overflow-hidden p-0', className)}>
       <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4 xl:grid-cols-8">{children}</div>
+    </Card>
+  );
+}
+
+/**
+ * A headline figure for the selected range. The sparkline is the same range again, in shape
+ * rather than in total, so the number and its story sit in one glance.
+ */
+export function Kpi({
+  label,
+  value,
+  sub,
+  delta,
+  series,
+  hint,
+}: {
+  label: string;
+  value: string;
+  sub: ReactNode;
+  delta?: MetricDelta | { changePct: number | null };
+  series: number[];
+  hint?: string;
+}) {
+  return (
+    <Card className="flex flex-col overflow-hidden p-0 transition-colors hover:border-line-strong">
+      <div className="flex-1 px-5 pt-4 pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-2xs font-medium tracking-wide text-subtle uppercase">{label}</p>
+          {delta ? <DeltaPill changePct={delta.changePct} /> : null}
+        </div>
+        <p
+          className="tabular mt-2.5 text-3xl leading-none font-semibold tracking-tight text-ink"
+          title={hint}
+        >
+          {value}
+        </p>
+        <p className="mt-2 truncate text-xs text-subtle">{sub}</p>
+      </div>
+      <Sparkline values={series} className="h-9 w-full" />
     </Card>
   );
 }
