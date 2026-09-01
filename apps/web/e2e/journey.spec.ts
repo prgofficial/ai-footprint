@@ -158,13 +158,30 @@ test.describe('with real analytics', () => {
     ).toBeVisible();
   });
 
-  test('the profile states its conclusion before its working', async ({ page }) => {
-    await page.goto('/profile?range=30d');
-    await expect(page.getByRole('heading', { name: 'Your AI Footprint' })).toBeVisible();
-    // The conclusion, stated in words, before any figure.
+  test('insights state their conclusion in words, and say when the work happened', async ({
+    page,
+  }) => {
+    await page.goto('/insights?range=30d');
+    // The conclusion in a sentence, before any figure supports it. This is the one thing the
+    // deleted profile page said that nothing else did.
     await expect(page.getByText(/^You used AI .*Claude Code/)).toBeVisible();
-    await expect(page.getByText('Tool concentration')).toBeVisible();
-    await expect(page.getByText('What you bring to AI')).toBeVisible();
+    await expect(page.getByText(/^Read from \d/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Hour of the day' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Day of the week' })).toBeVisible();
+  });
+
+  test('projects can be ranked by any column, not only by prompt count', async ({ page }) => {
+    await page.goto('/projects?range=30d');
+    const table = page.getByRole('table');
+    await expect(table.getByRole('columnheader', { name: /Active time/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+    await table.getByRole('button', { name: /^Prompts$/ }).click();
+    await expect(table.getByRole('columnheader', { name: /Prompts/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
   });
 
   test('settings expose the data location and both exports', async ({ page }) => {
@@ -243,7 +260,15 @@ test.describe('errors and accessibility', () => {
   });
 
   test.describe('axe', () => {
-    for (const path of ['/', '/activity', '/prompts', '/projects', '/insights', '/settings']) {
+    for (const path of [
+      '/',
+      '/sessions',
+      '/activity',
+      '/prompts',
+      '/projects',
+      '/insights',
+      '/settings',
+    ]) {
       test(`${path} has no critical or serious violations`, async ({ page }) => {
         await page.goto(path === '/' ? '/?range=30d' : `${path}?range=30d`);
         await page.waitForLoadState('networkidle');

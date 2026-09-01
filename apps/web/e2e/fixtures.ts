@@ -13,38 +13,42 @@ interface Seed {
   model: string;
 }
 
+/**
+ * Sized above the observation floor on purpose: Insights refuses to speak below forty prompts,
+ * so a smaller corpus would have left the product's most editorial screen untested.
+ */
 const SEEDS: Seed[] = [
   {
     daysAgo: 0,
-    count: 8,
+    count: 14,
     project: 'aurora',
     text: 'fix the failing login test in the auth module',
     model: 'claude-opus-4-8',
   },
   {
     daysAgo: 1,
-    count: 5,
+    count: 9,
     project: 'aurora',
     text: 'refactor the payment service to remove duplication',
     model: 'claude-opus-4-8',
   },
   {
     daysAgo: 2,
-    count: 4,
+    count: 7,
     project: 'borealis',
     text: 'deploy the docker swarm stack to staging',
     model: 'claude-sonnet-4-5',
   },
   {
     daysAgo: 4,
-    count: 6,
+    count: 10,
     project: 'aurora',
     text: 'write unit tests for the pricing calculator',
     model: 'claude-opus-4-8',
   },
   {
     daysAgo: 6,
-    count: 3,
+    count: 5,
     project: 'borealis',
     text: 'explain how this react reducer works',
     model: 'claude-haiku-4-5',
