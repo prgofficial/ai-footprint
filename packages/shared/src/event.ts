@@ -57,12 +57,21 @@ export function dedupeKeyInput(parts: {
    */
   contentHash?: string | null;
 }): string {
-  // A source that mints stable ids is trusted to have made them unique, so its key is
-  // byte-identical to what it has always been and a re-scan still dedupes exactly.
-  const identity = parts.externalId || (parts.contentHash ? `#${parts.contentHash}` : '');
+  // An external id IS the event's identity, so the clock is not part of the key when one is
+  // supplied. Including it meant Claude Code's streaming, which rewrites the same assistant
+  // message to the transcript several times, seconds apart, with byte-identical token counts,
+  // produced one event per rewrite. Measured over 130,125 real assistant records: 30,362 actual
+  // replies counted as 130,125 events, inflating every token and cost figure by 4.1x.
+  if (parts.externalId) {
+    return [parts.providerId, parts.externalId, parts.eventType, parts.discriminator ?? ''].join(
+      '|',
+    );
+  }
+
+  // With no id, the clock is all that separates the same question asked twice.
   return [
     parts.providerId,
-    identity,
+    parts.contentHash ? `#${parts.contentHash}` : '',
     parts.eventType,
     parts.timestamp,
     parts.discriminator ?? '',

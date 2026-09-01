@@ -91,7 +91,11 @@ export function mapRecord(record: TranscriptRecord, ctx: MapContext): AIEventInp
     const text = plainText(record);
 
     if (usage || model) {
-      const event = base(record, 'response', record.uuid ?? (record.requestId as string));
+      // `message.id` identifies the assistant's REPLY. `record.uuid` identifies the transcript
+      // LINE, and streaming writes one reply across several lines carrying the same usage.
+      // Keying on the line counted a single reply as many.
+      const replyId = record.message?.id ?? record.uuid ?? (record.requestId as string);
+      const event = base(record, 'response', replyId);
       event.model = model;
       event.inputTokens = usage?.input_tokens ?? null;
       event.outputTokens = usage?.output_tokens ?? null;
