@@ -195,7 +195,7 @@ function Row({
       >
         <span
           className={cn(
-            'tabular w-11 shrink-0 pt-px text-2xs',
+            'tabular w-16 shrink-0 pt-px text-2xs whitespace-nowrap',
             selected ? 'text-accent' : 'text-subtle',
           )}
         >
