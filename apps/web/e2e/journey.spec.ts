@@ -150,16 +150,21 @@ test.describe('with real analytics', () => {
     await expect(page.getByRole('complementary', { name: 'Session detail' })).toBeVisible();
   });
 
-  test('insights are backed by a visible sample size', async ({ page }) => {
+  test('insights are backed by a visible sample size, or say nothing', async ({ page }) => {
     await page.goto('/insights?range=30d');
-    await expect(page.getByText(/n = \d+/).first()).toBeVisible();
+    // Either observations with their denominator stated, or an explanation of the silence.
+    await expect(
+      page.getByText(/from \d[\d,]* prompts|Not enough to go on|not enough data/i).first(),
+    ).toBeVisible();
   });
 
-  test('the profile reads as a summary, not a dashboard', async ({ page }) => {
+  test('the profile states its conclusion before its working', async ({ page }) => {
     await page.goto('/profile?range=30d');
     await expect(page.getByRole('heading', { name: 'Your AI Footprint' })).toBeVisible();
-    await expect(page.getByRole('term').filter({ hasText: 'Most used tool' })).toBeVisible();
-    await expect(page.getByRole('definition').filter({ hasText: 'Claude Code' })).toBeVisible();
+    // The conclusion, stated in words, before any figure.
+    await expect(page.getByText(/^You used AI .*Claude Code/)).toBeVisible();
+    await expect(page.getByText('Tool concentration')).toBeVisible();
+    await expect(page.getByText('What you bring to AI')).toBeVisible();
   });
 
   test('settings expose the data location and both exports', async ({ page }) => {

@@ -140,7 +140,10 @@ export const useActivity = (filters: Filters, cursor?: string, eventType?: strin
         ...filterParams(filters),
         cursor,
         eventType,
-        limit: 50,
+        // The assistant's turns fold into one line each, so a page of 50 raw events collapsed
+        // to a single row covering five minutes. A page has to span enough time to be worth
+        // reading once the noise is folded away.
+        limit: 200,
       }),
     placeholderData: (previous) => previous,
   });
