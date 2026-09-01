@@ -1,0 +1,16 @@
+AI Footprint
+Copyright (c) 2026 Zyfolks Technologies and AI Footprint contributors
+Licensed under the MIT License. See LICENSE.
+
+This product bundles third-party material:
+
+Lucide (https://lucide.dev) — ISC License.
+  Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part
+  of Feather (MIT). All other copyright (c) for Lucide are held by Lucide
+  Contributors 2022.
+  Used for the interface icons, and for the footprint mark in the application
+  header and favicon, which is Lucide's "footprints" glyph.
+  Full text: node_modules/lucide-react/LICENSE
+
+Every other dependency is listed in package.json with its own licence, and none
+is redistributed in source form by this repository.

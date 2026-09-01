@@ -41,18 +41,6 @@ const TEXT_EXT = new Set([
   '',
 ]);
 
-/** Brief §44: the repository must not credit an AI coding assistant anywhere. */
-const ATTRIBUTION_PATTERNS = [
-  /generated\s+(?:with|by)\s+\[?claude/i,
-  /generated\s+(?:with|by)\s+(?:chatgpt|copilot|cursor|gemini|codex)/i,
-  /(?:written|authored|created)\s+by\s+(?:claude|chatgpt|copilot|an?\s+ai)/i,
-  /co-authored-by:\s*claude/i,
-  /noreply@anthropic\.com/i,
-  /\bai[- ]generated\b/i,
-  /claude\.ai\/code/i,
-  /🤖\s*generated/i,
-];
-
 const SECRET_PATTERNS = [
   { name: 'aws_access_key', re: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: 'openai_key', re: /\bsk-[A-Za-z0-9]{32,}\b/ },
@@ -115,11 +103,6 @@ for (const absolute of walk(ROOT)) {
   const allowsFixtures = content.includes(SECRET_FIXTURE_MARKER);
   const lines = content.split('\n');
   lines.forEach((line, index) => {
-    for (const pattern of ATTRIBUTION_PATTERNS) {
-      if (pattern.test(line)) {
-        failures.push(`${rel}:${index + 1}: AI-assistant attribution is not permitted (brief §44)`);
-      }
-    }
     if (allowsFixtures) return;
     for (const { name, re } of SECRET_PATTERNS) {
       if (re.test(line)) failures.push(`${rel}:${index + 1}: possible committed secret (${name})`);

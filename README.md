@@ -251,7 +251,8 @@ to check your wiring.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
-[SECURITY.md](SECURITY.md). Licensed under the [MIT License](LICENSE).
+[SECURITY.md](SECURITY.md). Licensed under the [MIT License](LICENSE); third-party
+material is listed in [NOTICE](NOTICE).
 
 ---
 
