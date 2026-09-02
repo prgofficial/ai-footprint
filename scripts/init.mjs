@@ -11,6 +11,7 @@ import {
   dockerAvailable,
   ensureAppDirectory,
   findFreePort,
+  hostUserIds,
   nodeMajor,
   npmCommand,
   repoRoot,
@@ -212,6 +213,7 @@ async function runDocker() {
         ...process.env,
         AI_FOOTPRINT_PORT: String(port),
         AI_FOOTPRINT_DATA: dataDirectory,
+        ...hostUserIds(),
       },
     },
   );

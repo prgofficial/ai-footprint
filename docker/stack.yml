@@ -2,7 +2,8 @@
 #
 #   docker swarm init                                   (once)
 #   npm run docker:build                                (stack deploy cannot build)
-#   docker stack deploy -c docker/stack.yml ai-footprint
+#   AI_FOOTPRINT_UID=$(id -u) AI_FOOTPRINT_GID=$(id -g) \
+#     docker stack deploy -c docker/stack.yml ai-footprint
 #   docker stack services ai-footprint
 #   docker stack rm ai-footprint                        (your data survives)
 
@@ -11,6 +12,17 @@ version: '3.8'
 services:
   app:
     image: ai-footprint:local
+    # The image ships a `node` user at uid 1000, and the data directory is a bind mount from
+    # the host, so on Linux the container can only write there if the two uids agree. They do
+    # not for anyone whose account is not the first one on the machine — uid 1001 and upward —
+    # and the container then dies on startup, restarts forever and never reports healthy.
+    # Docker Desktop hides this by remapping ownership; native Linux does not.
+    #
+    # Running as the host user is also the right answer on its own terms: the database is that
+    # person's own file, and chowning it to uid 1000 instead would take it away from them.
+    # The scripts fill these in; a manual deploy wants
+    #   AI_FOOTPRINT_UID=$(id -u) AI_FOOTPRINT_GID=$(id -g) docker stack deploy ...
+    user: '${AI_FOOTPRINT_UID:-1000}:${AI_FOOTPRINT_GID:-1000}'
     environment:
       AI_FOOTPRINT_MODE: docker
       AI_FOOTPRINT_HOME: /data

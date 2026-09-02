@@ -132,7 +132,8 @@ which is equivalent to:
 ```bash
 docker swarm init                                    # once, if not already initialised
 npm run docker:build                                 # stack deploy cannot build images
-docker stack deploy -c docker/stack.yml ai-footprint
+AI_FOOTPRINT_UID=$(id -u) AI_FOOTPRINT_GID=$(id -g) \
+  docker stack deploy -c docker/stack.yml ai-footprint
 docker stack services ai-footprint                   # status
 docker stack rm ai-footprint                         # stop
 ```

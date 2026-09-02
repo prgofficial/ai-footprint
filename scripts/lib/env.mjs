@@ -106,6 +106,16 @@ export function dockerAvailable() {
   return { available: true, version: info.stdout };
 }
 
+/**
+ * The uid/gid the container should run as, so it can write the bind-mounted data directory.
+ * Windows has no uids and Docker Desktop remaps ownership anyway, so there it stays unset and
+ * the stack file's default applies.
+ */
+export function hostUserIds() {
+  if (typeof process.getuid !== 'function' || typeof process.getgid !== 'function') return {};
+  return { AI_FOOTPRINT_UID: String(process.getuid()), AI_FOOTPRINT_GID: String(process.getgid()) };
+}
+
 export function swarmActive() {
   const result = run('docker', ['info', '--format', '{{.Swarm.LocalNodeState}}'], { quiet: true });
   return result.ok && result.stdout === 'active';

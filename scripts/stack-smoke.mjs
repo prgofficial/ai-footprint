@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { dim, fail, line, ok } from './lib/console.mjs';
-import { findFreePort, repoRoot, run, swarmActive, waitForHealth } from './lib/env.mjs';
+import {
+  findFreePort,
+  hostUserIds,
+  repoRoot,
+  run,
+  swarmActive,
+  waitForHealth,
+} from './lib/env.mjs';
 
 const STACK = process.env.AI_FOOTPRINT_STACK ?? 'ai-footprint-smoke';
 const root = repoRoot();
@@ -31,6 +38,7 @@ async function main() {
     ...process.env,
     AI_FOOTPRINT_PORT: String(port),
     AI_FOOTPRINT_DATA: dataDirectory,
+    ...hostUserIds(),
   };
   const stackFile = join(root, 'docker', 'stack.yml');
 
@@ -59,6 +67,12 @@ async function main() {
 
     const health = await waitForHealth(`${url}/api/health`, { timeoutMs: 240_000 });
     if (!health) {
+      // A task that dies before it opens a log leaves `service logs` empty, which is how this
+      // last failed: four silent minutes and no reason. The task list carries the reason in
+      // its error column, so print that first and the log second.
+      line(`  ${dim('docker service ps:')}`);
+      run('docker', ['service', 'ps', '--no-trunc', `${STACK}_app`]);
+      line(`  ${dim('docker service logs:')}`);
       run('docker', ['service', 'logs', '--tail', '80', `${STACK}_app`]);
       fail('The stack never became healthy.');
     }
