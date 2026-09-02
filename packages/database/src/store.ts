@@ -58,29 +58,38 @@ export class Store {
       path: this.databasePath,
       journalMode: options.journalMode ?? 'WAL',
     });
-    this.db = createDatabase(this.connection);
+    // Everything past the open has to give the handle back if it throws. A Store whose
+    // constructor fails is never returned, so nobody can close it, and on Windows an open
+    // handle keeps the file locked, so the database can then be neither deleted nor reopened
+    // until the process exits. A tampered migration row is exactly that path.
+    try {
+      this.db = createDatabase(this.connection);
 
-    this.migration =
-      options.runMigrations === false
-        ? { applied: [], alreadyApplied: 0, backupPath: null }
-        : migrate(this.connection, {
-            databasePath: this.databasePath === ':memory:' ? undefined : this.databasePath,
-            backupDir: paths.backups,
-          });
+      this.migration =
+        options.runMigrations === false
+          ? { applied: [], alreadyApplied: 0, backupPath: null }
+          : migrate(this.connection, {
+              databasePath: this.databasePath === ':memory:' ? undefined : this.databasePath,
+              backupDir: paths.backups,
+            });
 
-    this.providers = new ProviderRepository(this.db);
-    this.projects = new ProjectRepository(this.db);
-    this.sessions = new SessionRepository(this.db, this.connection);
-    this.events = new EventRepository(this.connection);
-    this.prompts = new PromptRepository(this.connection);
-    this.analytics = new AnalyticsRepository(this.connection);
-    this.rollups = new RollupRepository(this.connection);
-    this.rollupReads = new RollupReadRepository(this.connection);
-    this.enrichment = new EnrichmentRepository(this.connection);
-    this.collectorState = new CollectorStateRepository(this.db);
-    this.ingestLog = new IngestLogRepository(this.db);
-    this.settings = new SettingsRepository(this.db);
-    this.maintenance = new MaintenanceRepository(this.connection);
+      this.providers = new ProviderRepository(this.db);
+      this.projects = new ProjectRepository(this.db);
+      this.sessions = new SessionRepository(this.db, this.connection);
+      this.events = new EventRepository(this.connection);
+      this.prompts = new PromptRepository(this.connection);
+      this.analytics = new AnalyticsRepository(this.connection);
+      this.rollups = new RollupRepository(this.connection);
+      this.rollupReads = new RollupReadRepository(this.connection);
+      this.enrichment = new EnrichmentRepository(this.connection);
+      this.collectorState = new CollectorStateRepository(this.db);
+      this.ingestLog = new IngestLogRepository(this.db);
+      this.settings = new SettingsRepository(this.db);
+      this.maintenance = new MaintenanceRepository(this.connection);
+    } catch (error) {
+      checkpointAndClose(this.connection);
+      throw error;
+    }
   }
 
   integrity(): 'ok' | 'failed' {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../src/store';
 import { createTempStore, type TempStore } from './helpers';
@@ -107,6 +107,13 @@ describe('migrations', () => {
           },
         }),
     ).toThrow(/changed after it was applied/);
+
+    // And it must hand the file back. A constructor that throws is never returned, so nothing
+    // can close what it opened; on Windows the abandoned handle locks app.db and the database
+    // can be neither deleted nor reopened for the life of the process. That is the platform
+    // this assertion fails on if the leak returns; on POSIX, unlink of an open file succeeds.
+    expect(() => unlinkSync(path)).not.toThrow();
+
     temp.store.close = () => {};
   });
 });
